@@ -1,0 +1,27 @@
+{
+  "name": "omnihub",
+  "private": true,
+  "type": "module",
+  "packageManager": "bun@1.4.0",
+  "engines": { "bun": ">=1.4.0" },
+  "workspaces": ["apps/*", "packages/*"],
+  "scripts": {
+    "docker:up": "docker compose --env-file .env -f docker/docker-compose.yml up -d",
+    "docker:logs": "docker compose --env-file .env -f docker/docker-compose.yml logs -f db",
+    "docker:down": "docker compose --env-file .env -f docker/docker-compose.yml down",
+    "dev:api": "bun --filter hub-api dev",
+    "dev:web": "bun --filter web-dashboard dev",
+    "dev:mock": "bun --filter mock-erp dev",
+    "dev:all": "bun --filter '*' dev",
+    "typecheck": "bun --filter '*' typecheck",
+    "test": "bun test",
+    "db:generate": "bun --filter @omnihub/database db:generate",
+    "db:migrate": "bun --filter @omnihub/database db:migrate",
+    "db:seed": "bun --filter @omnihub/database db:seed",
+    "db:studio": "bun --filter @omnihub/database db:studio"
+  },
+  "devDependencies": {
+    "@types/bun": "^1.4.0",
+    "typescript": "~5.9.3"
+  }
+}

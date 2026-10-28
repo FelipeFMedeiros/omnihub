@@ -1,0 +1,23 @@
+{
+  "name": "@omnihub/database",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./schema": "./src/schema.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --project tsconfig.json",
+    "db:generate": "bun --env-file=../../.env run --bun drizzle-kit generate",
+    "db:migrate": "bun --env-file=../../.env run --bun drizzle-kit migrate",
+    "db:seed": "bun --env-file=../../.env src/seed.ts",
+    "db:studio": "bun --env-file=../../.env run --bun drizzle-kit studio"
+  },
+  "dependencies": {
+    "@omnihub/canonical-ir": "workspace:*",
+    "drizzle-orm": "~0.45.0",
+    "postgres": "^3.4.7"
+  },
+  "devDependencies": { "drizzle-kit": "~0.31.4" }
+}

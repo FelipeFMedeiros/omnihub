@@ -1,0 +1,12 @@
+node_modules/
+.env
+.env.*
+!.env.example
+dist/
+coverage/
+*.tsbuildinfo
+*.log
+.venv/
+__pycache__/
+.DS_Store
+Thumbs.db
