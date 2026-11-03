@@ -1,0 +1,20 @@
+{
+  "name": "hub-api",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "cd ../.. && bun --env-file=.env --watch apps/hub-api/src/index.ts",
+    "start": "cd ../.. && bun --env-file=.env apps/hub-api/src/index.ts",
+    "typecheck": "tsc --project tsconfig.json"
+  },
+  "dependencies": {
+    "@elysiajs/cors": "~1.4.0",
+    "@elysiajs/openapi": "~1.4.0",
+    "@omnihub/canonical-ir": "workspace:*",
+    "@omnihub/database": "workspace:*",
+    "@sinclair/typebox": "^0.34.41",
+    "drizzle-orm": "~0.45.0",
+    "elysia": "~1.4.0"
+  }
+}
