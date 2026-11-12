@@ -1,6 +1,6 @@
 import { afterAll, afterEach, beforeAll } from 'bun:test';
 import type { CanonicalOrder } from '@omnihub/canonical-ir';
-import { canonicalOrders, createDatabase, inventoryLedger, products } from '@omnihub/database';
+import { canonicalOrders, createDatabase, inventoryLedger, pipelineJobs, products } from '@omnihub/database';
 import { requireTestDatabaseUrl } from '@omnihub/database/testing';
 import { inArray } from 'drizzle-orm';
 import { migrate } from 'drizzle-orm/postgres-js/migrator';
@@ -13,6 +13,7 @@ export function databaseFixture() {
   let connection: ReturnType<typeof createDatabase>;
   const productIds = new Set<string>();
   const orderIds = new Set<string>();
+  const jobIds = new Set<string>();
 
   beforeAll(async () => {
     if (!testDatabaseUrl) throw new Error('TEST_DATABASE_URL ausente');
@@ -22,11 +23,12 @@ export function databaseFixture() {
   afterEach(async () => {
     if (!connection) return;
     await connection.db.transaction(async (tx) => {
+      if (jobIds.size) await tx.delete(pipelineJobs).where(inArray(pipelineJobs.id, [...jobIds]));
       if (productIds.size) await tx.delete(inventoryLedger).where(inArray(inventoryLedger.productId, [...productIds]));
       if (orderIds.size) await tx.delete(canonicalOrders).where(inArray(canonicalOrders.id, [...orderIds]));
       if (productIds.size) await tx.delete(products).where(inArray(products.id, [...productIds]));
     });
-    productIds.clear(); orderIds.clear();
+    productIds.clear(); orderIds.clear(); jobIds.clear();
   });
   afterAll(async () => { await connection?.client.end(); });
 
@@ -52,6 +54,8 @@ export function databaseFixture() {
   }
 
   return {
+    trackOrder(id: string) { orderIds.add(id); },
+    trackProcessing(id: string) { jobIds.add(id); },
     get db() { return connection.db; },
     order,
     async product(currentStock = 5, safetyStock = 0) {

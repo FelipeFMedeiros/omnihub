@@ -1,4 +1,4 @@
-export type StockMovementReason = 'SALE' | 'CANCELLATION' | 'ERP_SYNC' | 'MANUAL_ADJUST';
+export type StockMovementReason = 'SALE' | 'CANCELLATION' | 'ERP_SYNC' | 'MANUAL_ADJUST' | 'FULFILLMENT';
 
 export interface CanonicalStockMovement {
   readonly id: string;

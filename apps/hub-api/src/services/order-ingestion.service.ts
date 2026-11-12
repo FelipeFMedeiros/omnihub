@@ -1,5 +1,5 @@
 import { isCanonicalOrder, type CanonicalOrder, type MarketplaceSource } from '@omnihub/canonical-ir';
-import { canonicalOrders, inventoryLedger, products, type Database, type JsonValue } from '@omnihub/database';
+import { canonicalOrders, erpDispatches, inventoryLedger, products, type Database, type JsonValue } from '@omnihub/database';
 import { and, asc, eq, sql } from 'drizzle-orm';
 import { HubError } from '../errors';
 import { InventoryService } from './inventory.service';
@@ -69,6 +69,8 @@ export class OrderIngestionService {
       if (!order) throw new HubError(404, 'CANONICAL_ORDER_NOT_FOUND', 'Pedido canônico não encontrado.');
       if (order.status === 'CANCELLED') return { status: 200, duplicate: true, order: canonical(order) };
       if (!['PENDING', 'PAID'].includes(order.status)) throw new HubError(409, 'ORDER_NOT_CANCELLABLE', 'O estado do pedido não permite liberar a reserva.');
+      const [dispatch] = await tx.select().from(erpDispatches).where(eq(erpDispatches.orderId, order.id));
+      if (dispatch && (dispatch.attempts > 0 || dispatch.state === 'PROCESSING')) throw new HubError(409, 'ORDER_DISPATCH_RECONCILIATION_REQUIRED', 'Pedido enviado ao ERP exige conciliação antes do cancelamento.');
       const sales = await tx.select().from(inventoryLedger).where(and(
         eq(inventoryLedger.orderId, order.id), eq(inventoryLedger.reason, 'SALE'),
       )).orderBy(asc(inventoryLedger.productId));

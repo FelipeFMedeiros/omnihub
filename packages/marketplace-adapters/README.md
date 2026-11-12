@@ -2,8 +2,8 @@
 
 Esta entrega contém a interface `SpokeAdapter`, schemas de leitura e o primeiro
 parser Mercado Livre → `CanonicalOrder`. O cliente HTTP e o helper OAuth são
-independentes do MCP. Amazon e Shopee pertencem às TASK-011/012; ingestão HTTP,
-estoque e despacho ERP serão conectados na TASK-004.
+independentes do MCP. Amazon e Shopee pertencem às TASK-011/012; fila, ingestão HTTP,
+estoque e despacho ERP estão conectados pela TASK-004.
 
 ## Parser sem rede
 
@@ -70,65 +70,55 @@ sem corpo externo, credenciais ou causa de transporte.
 
 ## Autorizar a aplicação local
 
-O MCP autenticado serve para consultar documentação; sua autorização não é a do
-aplicativo Omnihub. O Mercado Livre usa **usuários de teste no ambiente de
-produção**, sem sandbox separado. Use o fluxo oficial de usuários de teste e
-somente transações entre essas contas. Estes comandos não criam contas ou pedidos.
-
-1. Preencha somente as chaves ausentes no `.env` da raiz, sem sobrescrevê-lo:
-   `MELI_APP_ID`, `MELI_CLIENT_SECRET`, `MELI_REDIRECT_URI` e
-   `MELI_TEST_SELLER_ID`. O redirect deve ser exatamente o cadastrado no DevCenter.
-2. `MELI_USE_PKCE=true` é o padrão; alinhe com a configuração PKCE da aplicação.
-   O helper usa state aleatório, prazo de dez minutos e S256 quando habilitado.
-3. Para redirect HTTPS público, configure o encaminhamento dessa rota para
-   `http://127.0.0.1:3001` antes da autorização. A porta local pode ser alterada por
-   `MELI_OAUTH_LISTEN_PORT`. O helper não instala nem inicia túnel.
-   HTTP de loopback só funciona se a plataforma aceitar esse cadastro.
-4. Execute na raiz e abra a URL apresentada, autorizando com o vendedor de teste:
+O MCP consulta documentação e tem autorização separada da aplicação Omnihub.
+Na TASK-004, OAuth e smoke passaram a usar o Hub na porta 3000, com state,
+PKCE S256, expiração e armazenamento privado compartilhado. Não há segundo
+listener no fluxo normal. Preparação, tokens administrativos locais, criação
+explícita de contas e endpoints em [guia do pipeline](../../docs/integrations/task-004.md).
 
 ```powershell
+bun run setup:local
+bun run dev:api
+# Em outro terminal, com o Hub ativo:
 bun run meli:authorize
-```
-
-O callback confere state, expiração, caminho e parâmetros fixos do redirect.
-Client secret e code verifier não aparecem na URL de autorização. O resultado
-fica em `output/meli/tokens.json`, ignorado pelo Git. O helper persiste a rotação
-antes de usar os tokens e prefere esse arquivo ao refresh inicial do `.env`.
-Alternativamente, um `MELI_REFRESH_TOKEN` obtido pelo fluxo oficial pode iniciar
-o primeiro refresh. Não reutilize um refresh antigo após a rotação.
-
-Esse arquivo é um armazenamento privado de **desenvolvimento local, para um
-processo/aplicação**. Usa gravação temporária e rename; modo `0600` quando
-suportado pelo sistema. No Windows, as permissões dependem da ACL da pasta.
-Não sincronize `output/meli` para o cofre, Git ou evidências públicas.
-Armazenamento multiusuário e disputa de refresh entre processos não estão nesta
-entrega. Se o processo cair após o servidor rotacionar o token, pode ser
-necessário autorizar novamente.
-
-## Smoke oficial explícito de leitura
-
-Configuração local informada em 2026-11-12: túnel HTTPS encaminhado para
-`localhost:3000`, com callback `/api/oauth/meli/callback` e notificações
-`/api/webhooks/meli`. O `.env` local usa `MELI_OAUTH_LISTEN_PORT=3000` para o
-helper standalone. Nesse modo, pare `dev:api` antes de executar `meli:authorize`;
-dois processos não podem ocupar a mesma porta. A TASK-004 integrará essas rotas
-ao Hub na 3000; a API atual ainda não as oferece. O valor padrão do helper
-continua 3001 para outros encaminhamentos. Se o domínio público mudar, atualize
-o redirect no `.env` e no DevCenter.
-
-```powershell
 bun run meli:smoke
 # Opcional, somente pedido do vendedor de teste configurado:
 bun run meli:smoke --order-id ID_DO_PEDIDO_DE_TESTE
 ```
 
-O smoke primeiro consulta `/users/me` e exige `MLB`, tag `test_user` e o vendedor
-esperado. Só então permite ler um pedido e seus recursos. A saída e o relatório
-em `output/task-003/meli-smoke-*.json` contêm apenas flags, data, modo e padrões
-de operações; não contêm IDs, PII ou tokens. A opção de pedido confirma leitura,
-não promete conformidade integral com a IR. `canonicalParsingVerified: false`
-explicita esse limite. `MELI_TEST_BUYER_ID` documenta a futura conta compradora e
-ainda não é consumido pelo helper.
+Redirect exato cadastrado, terminado em /api/oauth/meli/callback, encaminhado
+pelo túnel HTTPS para localhost:3000. Quando o domínio público mudar, atualizar
+.env e cadastro no DevCenter. O comando histórico `authorize-standalone`
+permanece disponível, mas só pode ocupar a porta configurada com a API parada.
+MELI_OAUTH_LISTEN_PORT afeta apenas essa alternativa; o Hub usa HUB_PORT.
+
+Tokens do vendedor ficam em output/meli/tokens.json. O Hub é o único escritor
+no fluxo normal, inclusive no smoke. Usa gravação temporária + rename e modo
+0600 onde suportado; no Windows, depende também da ACL da pasta. É armazenamento
+local de um processo/aplicação, sem homologação multiusuário/multiprocesso.
+Não copiar output/meli para Git, cofre ou evidências compartilhadas. Se o processo
+cair após rotação remota e antes da persistência, pode ser necessário reautorizar.
+
+O smoke exige identidade esperada, MLB e test_user; registra flags, data e padrões
+de operações em output/task-004/meli-smoke-*.json, sem IDs/PII/tokens. Leitura
+opcional de pedido não implica normalização: canonicalParsingVerified permanece
+false. A identidade oficial do vendedor de teste foi verificada nesta entrega;
+leitura de pedido/publicação de saldo oficiais continuam sem ensaio identificado.
+
+O utilitário `bun run meli:create-test-users` cria/reutiliza vendedor e comprador
+por POST explícito, sem retry automático, após autorização inicial da conta
+criadora. Credenciais em output/meli/test-users.json e tokens iniciais em
+bootstrap-tokens.json, ambos privados. Depois é necessário entrar e autorizar
+com o vendedor criado. A API usa contas de teste na produção oficial, sem
+sandbox separado; não fazer transações de teste com contas reais.
+
+## Emissão e testes
+
+O pacote também fornece o emissor IR → ERP legado, atualização absoluta de saldo
+Mercado Livre (com verificação de vendedor de teste e dono do anúncio), inspeção
+mascarada de snapshots e HMAC do callback interno ERP. Essas funções não acessam
+PostgreSQL. Cancelamento é identificado no recurso autorizado para permitir ao
+Hub liberar uma reserva existente sem reconstruir PII ocultada.
 
 ```powershell
 bun test packages/marketplace-adapters/tests
@@ -136,7 +126,7 @@ bun run typecheck
 bun test
 ```
 
-Os testes desse pacote usam transporte injetado e dados sintéticos; não fazem
-chamadas externas e não precisam de `.env`. Origem/versão dos contratos estão no
-[catálogo de fixtures](tests/fixtures/README.md). A primeira entrega possui
-[registro de evidências e snapshot](../../docs/integrations/task-003.md).
+Os testes do pacote usam transporte injetado e dados sintéticos. As origens dos
+contratos constam no [catálogo de fixtures](tests/fixtures/README.md); a primeira
+entrega tem [snapshot histórico](../../docs/integrations/task-003.md). O guia da
+TASK-004 diferencia OAuth/identidade oficiais dos ensaios locais do pipeline.

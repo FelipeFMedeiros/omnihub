@@ -9,8 +9,10 @@ Hub omnichannel com Representação Intermediária (IR), desenvolvido como PoC d
 As TASK-001 e TASK-002 entregam os contratos canônicos com TypeBox, persistência
 Drizzle/PostgreSQL 17, Hub API em Elysia e motor transacional de estoque.
 A TASK-003 entrega o [adaptador Mercado Livre](packages/marketplace-adapters/README.md),
-com parser puro, cliente de leitura e helper OAuth. Despacho para ERP, segurança
-administrativa, dashboard, ARIMA e os demais canais entram nas próximas tarefas.
+com parser puro, cliente de leitura e helper OAuth. A TASK-004 conecta a fila
+durável, reserva, Mock ERP e sincronização de saldo, com consultas operacionais.
+Veja o [guia do pipeline](docs/integrations/task-004.md). Login/sessão do dashboard,
+interface operacional, ARIMA e os demais canais entram nas próximas tarefas.
 
 Pré-requisitos desta etapa: **Bun 1.4+**, **Docker** e **Docker Compose**.
 TypeScript fica na série **5.9**, Drizzle ORM na **0.45** e Drizzle Kit na **0.31**.
@@ -19,6 +21,7 @@ O lockfile único é `bun.lock`, formato textual padrão do [Bun](https://bun.co
 
 ```text
 apps/hub-api/              Elysia: estoque, ledger, saúde e OpenAPI (porta 3000)
+apps/mock-erp/             ERP em memória: faturamento, reposição e caos (porta 3002)
 packages/canonical-ir/     Interfaces, schemas TypeBox e validação semântica
 packages/database/         Client, schema, migration, seed e testes de integração
 packages/marketplace-adapters/ Parser Mercado Livre, schemas, OAuth e leitura oficial
@@ -34,6 +37,7 @@ Execute na raiz do repositório, em PowerShell:
 ```powershell
 bun install
 if (!(Test-Path .env)) { Copy-Item .env.example .env }
+bun run setup:local
 bun run docker:up
 bun run db:generate
 bun run db:migrate
@@ -60,7 +64,8 @@ A migration inicial já está versionada em `packages/database/drizzle/`.
 `db:generate` gera SQL quando o schema muda; não use `push` no lugar de migrations.
 O seed é transacional e pode ser reexecutado: insere três SKUs e nove mapeamentos
 sandbox (um por marketplace para cada SKU), preservando registros e saldos existentes.
-Os identificadores externos do seed são fictícios.
+Os identificadores externos do seed são fictícios e seus vínculos ficam com
+sincronização desabilitada. Cadastre os anúncios de teste reais separadamente.
 
 ## Verificações
 
@@ -147,11 +152,12 @@ O pacote de banco não conecta durante a importação. `createDatabase` lê
 `DATABASE_URL` e `DATABASE_POOL_SIZE` (padrão 20), ou recebe URL e tamanho do pool
 como argumentos. O chamador é responsável por encerrar o client.
 
-As quatro tabelas são `products`, `spoke_mappings`, `canonical_orders` e
-`inventory_ledger`. As chaves primárias UUID v7 são geradas pelo Bun nos inserts
+As tabelas de domínio são `products`, `spoke_mappings`, `canonical_orders` e
+`inventory_ledger`; `pipeline_jobs`, `erp_dispatches` e `erp_attempts` guardam fila,
+snapshots, entrega e orçamento de tentativas. As chaves UUID v7 são geradas pelo Bun nos inserts
 Drizzle; inserts SQL diretos precisam fornecer o ID. Timestamps usam fuso horário.
 Dinheiro e quantidades no PostgreSQL usam `integer` (limite de 2.147.483.647).
-Os índices únicos protegem SKU, `(marketplace, external_item_id)` e
+Os índices únicos protegem SKU, `(marketplace, external_item_id, external_variant_id)` e
 `(source, external_order_id)`. Restrições `CHECK` impedem valores negativos e
 enumerações desconhecidas no banco.
 
@@ -191,7 +197,8 @@ falta de saldo reverte o pedido inteiro com `409 INSUFFICIENT_CANONICAL_STOCK`.
 `ON CONFLICT` pela origem e identificador externo resolve também duplicatas
 simultâneas: a primeira criação retorna `status: 201`; as demais retornam o
 pedido original com `status: 200` e `duplicate: true`, preservando o JSON inicial.
-Esses valores são recibos do serviço para os futuros handlers HTTP de webhook.
+Esses valores são recibos internos do serviço. O webhook da TASK-004 confirma
+somente a gravação na fila com 200; o resultado é consultado por processingId.
 
 `InventoryService.reserveStock(productId, quantity, orderId)` permite reservar
 contra um pedido já persistido; repetições do mesmo pedido/produto/quantidade
@@ -212,9 +219,11 @@ acontece dentro dessas transações. A reavaliação do predicado após locks
 concorrentes segue o comportamento documentado do
 [PostgreSQL 17](https://www.postgresql.org/docs/17/transaction-iso.html).
 
-Nesta etapa, a superfície HTTP oferece saúde, documentação e consultas. Os
-serviços de ingestão, cancelamento e reposição serão conectados aos webhooks
-nas tarefas seguintes, junto aos parsers e validações criptográficas.
+O webhook Mercado Livre persiste o aviso antes de responder 200; um worker
+consulta o recurso autorizado e executa o pipeline. OAuth compartilha a porta
+3000 com a API. O callback ERP exige HMAC no corpo bruto. Consulte os contratos,
+tokens administrativos locais, estados e limites no [guia da TASK-004](docs/integrations/task-004.md).
+Os handlers executáveis e suas consultas estão em `/docs`.
 
 ## Mercado Livre — autorização e leitura
 
@@ -240,6 +249,7 @@ credenciais: `bun test packages/marketplace-adapters/tests`.
 | Comando | Finalidade |
 | --- | --- |
 | `bun run docker:up` | Subir o PostgreSQL com volume persistente |
+| `bun run setup:local` | Gerar tokens de desenvolvimento ausentes sem imprimi-los |
 | `bun run docker:logs` | Acompanhar logs do banco |
 | `bun run docker:down` | Parar o Compose, preservando o volume |
 | `bun run db:generate` | Gerar migration a partir do schema |
@@ -249,20 +259,20 @@ credenciais: `bun test packages/marketplace-adapters/tests`.
 | `bun run typecheck` | Verificar tipos de todos os pacotes implementados |
 | `bun test` / `bun run test` | Executar a suíte Bun |
 | `bun run dev:api` | Iniciar Hub API com watch, porta 3000 |
-| `bun run dev:mock` | Reservado ao Mock ERP, porta 3002 (TASK-004) |
+| `bun run dev:mock` | Iniciar o Mock ERP em memória, porta 3002 |
 | `bun run dev:web` | Reservado ao dashboard, porta 5173 (TASK-006) |
 | `bun run dev:ui` | Abrir catálogo interativo do design system, porta 6006 |
 | `bun run build:ui` | Gerar catálogo estático em packages/ui/storybook-static |
 | `bun run preview:ui` | Servir localmente o catálogo compilado, porta 6006 |
 | `bun run test:ui` | Verificar interação e acessibilidade no Chrome headless |
 | `bun run meli:authorize` | Autorizar a aplicação no helper OAuth local |
+| `bun run meli:create-test-users` | Criar/reutilizar contas de teste após autorização inicial explícita |
 | `bun run meli:smoke` | Verificar conta de teste e leitura oficial explícita |
 | `bun run dev:all` | Iniciar os workspaces que possuírem script `dev` |
 
 O watch da API roda a partir da raiz e acompanha também os pacotes compartilhados.
-Os scripts de Mock ERP e dashboard dependem das próximas tarefas.
-O `.env.example` separa configurações atuais das futuras. `PUBLIC_*`, `MOCK_ERP_*`
-e a conta compradora ainda não são consumidos pelo código atual; JWT/Turnstile
+O script do dashboard depende da TASK-006. O `.env.example` separa configurações
+atuais das futuras. O pipeline usa `MOCK_ERP_*` e os tokens locais; JWT/Turnstile
 serão configurados na TASK-005. Shopee será simulada localmente, sem chave oficial.
 O catálogo de UI não precisa de `.env`. Para Mercado Livre, o redirect é uma URL
 de retorno cadastrada por você, o vendedor é o ID de um usuário de teste criado

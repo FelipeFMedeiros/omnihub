@@ -1,76 +1,10 @@
-import { mkdir, readFile, rename, stat, unlink, writeFile } from 'node:fs/promises';
-import { dirname } from 'node:path';
+import { mkdir, writeFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
-import { randomBytes } from 'node:crypto';
-import { Type } from '@sinclair/typebox';
-import { AdapterError, createMeliAuthorization, decoder, externalId, MeliClient, validateMeliCallback, validateRedirectUri, type MeliTokens } from '../src';
-
-export const tokenFile = fileURLToPath(new URL('../../../output/meli/tokens.json', import.meta.url));
-const evidenceDirectory = fileURLToPath(new URL('../../../output/task-003/', import.meta.url));
-const storedSchema = decoder(Type.Object({
-  version: Type.Literal(1), clientId: Type.String({ pattern: '^[1-9][0-9]*$' }),
-  tokens: Type.Object({
-    accessToken: Type.String({ minLength: 1 }), refreshToken: Type.String({ minLength: 1 }),
-    userId: Type.String({ pattern: '^[1-9][0-9]*$' }), expiresAt: Type.Integer({ minimum: 0, maximum: Number.MAX_SAFE_INTEGER }),
-  }, { additionalProperties: false }),
-}, { additionalProperties: false }));
-
+import { AdapterError, createMeliAuthorization, externalId, MeliClient, validateMeliCallback } from '../src';
+import { loadMeliSettings, readMeliTokens, tokenFile, writeMeliTokens } from '../src/mercadolivre/local';
+export { loadMeliSettings, readMeliTokens, tokenFile, writeMeliTokens } from '../src/mercadolivre/local';
+const evidenceDirectory = fileURLToPath(new URL('../../../output/task-004/', import.meta.url));
 function configurationError(message: string): never { throw new AdapterError('MELI_INVALID_CONFIGURATION', message, 400); }
-function required(env: NodeJS.ProcessEnv, key: string): string {
-  const value = env[key]?.trim();
-  if (!value || /SUBSTITUIR|PLACEHOLDER/i.test(value)) return configurationError(`Preencha ${key} no .env local.`);
-  return value;
-}
-export function loadMeliSettings(mode: 'authorize' | 'smoke', env: NodeJS.ProcessEnv = process.env) {
-  const clientId = externalId(required(env, 'MELI_APP_ID'));
-  const clientSecret = required(env, 'MELI_CLIENT_SECRET');
-  const seller = env.MELI_TEST_SELLER_ID?.trim();
-  const expectedSellerId = seller && !/SUBSTITUIR/i.test(seller) ? externalId(seller) : undefined;
-  if (mode === 'smoke' && !expectedSellerId) return configurationError('Preencha MELI_TEST_SELLER_ID para limitar o smoke ao vendedor de teste.');
-  const redirectUri = mode === 'authorize' ? required(env, 'MELI_REDIRECT_URI') : undefined;
-  const pkceSetting = env.MELI_USE_PKCE ?? 'true';
-  if (!['true', 'false'].includes(pkceSetting)) return configurationError('MELI_USE_PKCE deve ser true ou false.');
-  let port = Number(env.MELI_OAUTH_LISTEN_PORT ?? 3001);
-  if (redirectUri) {
-    const redirect = validateRedirectUri(redirectUri);
-    if (redirect.protocol === 'http:') {
-      const redirectPort = Number(redirect.port || 80);
-      if (env.MELI_OAUTH_LISTEN_PORT && port !== redirectPort) return configurationError('A porta local deve corresponder ao redirect HTTP de loopback.');
-      port = redirectPort;
-    }
-  }
-  if (!Number.isSafeInteger(port) || port < 1 || port > 65535) return configurationError('MELI_OAUTH_LISTEN_PORT inválida.');
-  const refresh = env.MELI_REFRESH_TOKEN?.trim();
-  return {
-    clientId, clientSecret, expectedSellerId, redirectUri, port, pkce: pkceSetting === 'true',
-    refreshToken: refresh && !/SUBSTITUIR/i.test(refresh) ? refresh : undefined,
-  };
-}
-
-export async function readMeliTokens(path: string, clientId: string): Promise<MeliTokens | undefined> {
-  try {
-    if ((await stat(path)).size > 65536) return configurationError('Arquivo local de credenciais inválido; refaça a autorização.');
-    const stored = storedSchema(JSON.parse(await readFile(path, 'utf8')) as unknown);
-    if (stored.clientId !== clientId) return configurationError('Arquivo local pertence a outra aplicação; preserve-o antes de autorizar a aplicação atual.');
-    return stored.tokens;
-  } catch (error) {
-    if (typeof error === 'object' && error !== null && 'code' in error && error.code === 'ENOENT') return undefined;
-    if (error instanceof AdapterError && error.code === 'MELI_INVALID_CONFIGURATION') throw error;
-    return configurationError('Não foi possível ler as credenciais locais; confira o arquivo ou refaça a autorização.');
-  }
-}
-
-/** Arquivo privado de desenvolvimento. Não é um store multiusuário/multiprocesso. */
-export async function writeMeliTokens(path: string, clientId: string, tokens: MeliTokens): Promise<void> {
-  const stored = storedSchema({ version: 1, clientId, tokens });
-  await mkdir(dirname(path), { recursive: true });
-  const temporary = `${path}.${randomBytes(12).toString('hex')}.tmp`;
-  try {
-    await writeFile(temporary, JSON.stringify(stored, null, 2), { encoding: 'utf8', mode: 0o600, flag: 'wx' });
-    await rename(temporary, path);
-  } finally { await unlink(temporary).catch(() => {}); }
-}
-
 export async function smokeMeli(client: MeliClient, expectedSellerId: string, orderId?: string) {
   const user = await client.getCurrentUser();
   if (user.id !== externalId(expectedSellerId) || !user.isTestUser || user.siteId !== 'MLB') {
@@ -128,14 +62,26 @@ async function authorize() {
 async function main() {
   const [command, ...args] = process.argv.slice(2);
   if (command === '--help' || command === 'help') {
-    console.log('bun run meli:authorize\nbun run meli:smoke [--order-id ID]\nCredenciais somente no .env e no arquivo privado de tokens.'); return;
+    console.log('bun run meli:authorize (Hub ativo)\nbun run meli:smoke [--order-id ID]\nAlternativa standalone: authorize-standalone, com API parada.\nCredenciais somente no .env e no arquivo privado de tokens.'); return;
   }
-  if (command === 'authorize' && args.length === 0) return authorize();
+  if (command === 'authorize-standalone' && args.length === 0) return authorize();
+  if (command === 'authorize' && args.length === 0) {
+    const admin = process.env.HUB_ADMIN_TOKEN ?? '', port = Number(process.env.HUB_PORT ?? 3000);
+    if (admin.length < 32 || !Number.isInteger(port) || port < 1 || port > 65535) return configurationError('Configure HUB_ADMIN_TOKEN e HUB_PORT; inicie dev:api.');
+    let response: Response;
+    try { response = await fetch(`http://127.0.0.1:${port}/api/oauth/meli/start`, { method:'POST', redirect:'error', signal:AbortSignal.timeout(5000), headers:{Authorization:`Bearer ${admin}`} }); }
+    catch { return configurationError('Inicie o Hub antes de executar meli:authorize.'); }
+    if (!response.ok) return configurationError('O Hub rejeitou o inicio OAuth; confira suas configuracoes privadas.');
+    const result: unknown = await response.json();
+    if (!result || typeof result !== 'object' || !('authorizationUrl' in result) || typeof result.authorizationUrl !== 'string') return configurationError('Resposta OAuth do Hub invalida.');
+    console.log(`Abra no navegador e autorize a aplicacao:\n${result.authorizationUrl}`); return;
+  }
   if (command !== 'smoke' || (args.length !== 0 && !(args.length === 2 && args[0] === '--order-id'))) return configurationError('Comando inválido; use --help.');
-  const settings = loadMeliSettings('smoke');
-  const initialTokens = await readMeliTokens(tokenFile, settings.clientId);
-  const client = new MeliClient({ ...settings, initialTokens, onTokens: tokens => writeMeliTokens(tokenFile, settings.clientId, tokens) });
-  const result = await smokeMeli(client, settings.expectedSellerId ?? '', args[1]);
+  const admin = process.env.HUB_ADMIN_TOKEN ?? '', port = Number(process.env.HUB_PORT ?? 3000);
+  if (admin.length < 32 || !Number.isInteger(port) || port < 1 || port > 65535) return configurationError('Configure HUB_ADMIN_TOKEN e HUB_PORT; inicie dev:api.');
+  const response = await fetch(`http://127.0.0.1:${port}/api/oauth/meli/smoke`,{method:'POST',redirect:'error',signal:AbortSignal.timeout(120000),headers:{Authorization:`Bearer ${admin}`,'Content-Type':'application/json'},body:JSON.stringify(args[1]?{externalOrderId:externalId(args[1])}:{})});
+  if (!response.ok) throw new AdapterError('MELI_HTTP_ERROR','Smoke oficial rejeitado pelo Hub; confira configuracao e autorizacao do vendedor de teste.',response.status);
+  const result = await response.json() as {checkedAt:string};
   await mkdir(evidenceDirectory, { recursive: true });
   const path = `${evidenceDirectory}/meli-smoke-${result.checkedAt.replace(/[:.]/g, '-')}.json`;
   await writeFile(path, JSON.stringify(result, null, 2), 'utf8');

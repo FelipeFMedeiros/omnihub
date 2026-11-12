@@ -1,0 +1,9 @@
+{
+  "name": "mock-erp", "version": "0.1.0", "private": true, "type": "module",
+  "scripts": {
+    "dev": "cd ../.. && bun --env-file=.env --watch apps/mock-erp/src/index.ts",
+    "start": "cd ../.. && bun --env-file=.env apps/mock-erp/src/index.ts",
+    "typecheck": "tsc --project tsconfig.json"
+  },
+  "dependencies": { "@omnihub/marketplace-adapters": "workspace:*", "elysia": "~1.4.0" }
+}

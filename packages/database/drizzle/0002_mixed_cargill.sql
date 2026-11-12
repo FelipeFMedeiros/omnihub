@@ -1,0 +1,1 @@
+ALTER TABLE "pipeline_jobs" ADD COLUMN "transport_mode" varchar(30) DEFAULT 'OFFICIAL_TEST_USER' NOT NULL;

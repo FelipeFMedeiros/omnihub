@@ -24,7 +24,8 @@ export async function seedDatabase(db: Pick<Database, 'transaction'>): Promise<v
           marketplace,
           externalItemId: `sandbox-${marketplace.toLowerCase()}-${position + 1}`,
           externalSku: product.sku,
-        }).onConflictDoNothing({ target: [spokeMappings.marketplace, spokeMappings.externalItemId] });
+          syncEnabled: 'N', // IDs sintéticos não podem chegar ao gateway oficial.
+        }).onConflictDoNothing({ target: [spokeMappings.marketplace, spokeMappings.externalItemId, spokeMappings.externalVariantId] });
       }
     }
   });

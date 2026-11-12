@@ -22,7 +22,7 @@ export const CanonicalOrderStatusSchema = Type.Union([
 
 export const StockMovementReasonSchema = Type.Union([
   Type.Literal('SALE'), Type.Literal('CANCELLATION'),
-  Type.Literal('ERP_SYNC'), Type.Literal('MANUAL_ADJUST'),
+  Type.Literal('ERP_SYNC'), Type.Literal('MANUAL_ADJUST'), Type.Literal('FULFILLMENT'),
 ]);
 
 export const CanonicalOrderItemSchema = Type.Object({

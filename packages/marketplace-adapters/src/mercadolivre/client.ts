@@ -85,20 +85,21 @@ export class MeliClient {
     if (this.#options.expectedSellerId && userId !== this.#options.expectedSellerId) throw new AdapterError('ADAPTER_RESOURCE_MISMATCH', 'Autorização não corresponde ao vendedor configurado.', 403);
   }
 
-  async #request(path: string, accessToken?: string, form?: URLSearchParams): Promise<{ status: number; body: unknown }> {
-    const retryable = form === undefined;
+  async #request(path: string, accessToken?: string, form?: URLSearchParams, stockBody?: { available_quantity: number } | { site_id: 'MLB' }, jsonMethod: 'PUT' | 'POST' = 'PUT'): Promise<{ status: number; body: unknown }> {
+    const retryable = form === undefined && !(stockBody && jsonMethod === 'POST');
     for (let attempt = 0; ; attempt++) {
       const controller = new AbortController();
       const timer = setTimeout(() => controller.abort(), this.#timeoutMs);
       let waitMs = 0;
       try {
         const response = await this.#transport(new Request(`https://api.mercadolibre.com${path}`, {
-          method: form ? 'POST' : 'GET', redirect: 'error', signal: controller.signal,
+          method: form ? 'POST' : stockBody ? jsonMethod : 'GET', redirect: 'error', signal: controller.signal,
           headers: {
             Accept: 'application/json', ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
             ...(form ? { 'Content-Type': 'application/x-www-form-urlencoded' } : {}),
+            ...(stockBody ? { 'Content-Type': 'application/json' } : {}),
             ...(path.startsWith('/shipments/') ? { 'x-format-new': 'true' } : {}),
-          }, ...(form ? { body: form.toString() } : {}),
+          }, ...(form ? { body: form.toString() } : stockBody ? { body: JSON.stringify(stockBody) } : {}),
         }));
         if (response.ok) return { status: response.status, body: await readJson(response) };
         await response.body?.cancel();
@@ -177,6 +178,36 @@ export class MeliClient {
       this.#checkOwner(externalId(user.id));
       return { id: externalId(user.id), siteId: user.site_id, isTestUser: user.tags.includes('test_user') };
     } catch (error) { if (error instanceof AdapterError && error.code === 'ADAPTER_RESOURCE_MISMATCH') throw error; return invalidResponse(); }
+  }
+
+  async updateStock(itemId: string, variantId: string, availableQuantity: number): Promise<void> {
+    if (!/^MLB[0-9]+$/.test(itemId) || !Number.isSafeInteger(availableQuantity) || availableQuantity < 0 || availableQuantity > 2147483647) {
+      throw new AdapterError('ADAPTER_INVALID_PAYLOAD', 'Identificação ou saldo de anúncio inválido.');
+    }
+    const identity = await this.getCurrentUser();
+    if (!this.#options.expectedSellerId || identity.id !== this.#options.expectedSellerId || !identity.isTestUser || identity.siteId !== 'MLB') {
+      throw new AdapterError('ADAPTER_RESOURCE_MISMATCH', 'Atualização habilitada somente para vendedor de teste esperado.', 403);
+    }
+    const item = await this.#get(`/items/${itemId}`);
+    if (!item || typeof item !== 'object' || !('seller_id' in item) || externalId(item.seller_id) !== identity.id) {
+      throw new AdapterError('ADAPTER_RESOURCE_MISMATCH', 'Anúncio não pertence ao vendedor esperado.', 403);
+    }
+    let token = this.#tokens;
+    if (!token || token.expiresAt <= this.#now() + 30000) token = await this.#refresh();
+    const path = `/items/${itemId}${variantId ? `/variations/${externalId(variantId)}` : ''}`;
+    const result = await this.#request(path, token.accessToken, undefined, { available_quantity: availableQuantity });
+    if (result.status < 200 || result.status >= 300) throw new AdapterError('MELI_HTTP_ERROR', HTTP_ERROR, result.status);
+  }
+
+  /** Utilitário explícito de preparação; nunca chamado pelo worker. Sem retry de POST. */
+  async createTestUser(): Promise<{ id: string; nickname: string; password: string; site_status: string }> {
+    let token = this.#tokens;
+    if (!token || token.expiresAt <= this.#now() + 30000) token = await this.#refresh();
+    const result = await this.#request('/users/test_user', token.accessToken, undefined, { site_id: 'MLB' }, 'POST');
+    if (result.status < 200 || result.status >= 300) throw new AdapterError('MELI_HTTP_ERROR', HTTP_ERROR, result.status);
+    const raw = result.body;
+    if (!raw || typeof raw !== 'object' || !('id' in raw) || !('nickname' in raw) || typeof raw.nickname !== 'string' || !('password' in raw) || typeof raw.password !== 'string' || !('site_status' in raw) || typeof raw.site_status !== 'string') return invalidResponse();
+    return { id: externalId(raw.id), nickname: raw.nickname, password: raw.password, site_status: raw.site_status };
   }
 
   async getOrder(id: string) {
