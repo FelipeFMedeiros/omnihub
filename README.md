@@ -1,5 +1,10 @@
 # Omnihub
 
+O [design system](packages/ui/README.md) está disponível no catálogo interativo
+em **http://localhost:6006**, com `bun run dev:ui`. Inclui temas claro/escuro,
+fundamentos da marca, componentes e padrões responsivos. A TASK-009 entrega
+essa base visual; a TASK-006 integrará o dashboard aos contratos reais da API.
+
 Hub omnichannel com Representação Intermediária (IR), desenvolvido como PoC do TCC.
 As TASK-001 e TASK-002 entregam os contratos canônicos com TypeBox, persistência
 Drizzle/PostgreSQL 17, Hub API em Elysia e motor transacional de estoque.
@@ -15,6 +20,7 @@ O lockfile único é `bun.lock`, formato textual padrão do [Bun](https://bun.co
 apps/hub-api/              Elysia: estoque, ledger, saúde e OpenAPI (porta 3000)
 packages/canonical-ir/     Interfaces, schemas TypeBox e validação semântica
 packages/database/         Client, schema, migration, seed e testes de integração
+packages/ui/               Tokens, componentes React e catálogo Storybook (6006)
 packages/tsconfig/         TypeScript estrito compartilhado
 docker/docker-compose.yml  PostgreSQL 17 Alpine com volume e healthcheck
 ```
@@ -80,6 +86,34 @@ A suíte cobre contratos, restrições relacionais, idempotência, JSON de audit
 seed, rollback multi-item, cancelamentos, reposições e API HTTP. O ensaio de 15
 reservas sobre 5 unidades exige exatamente 5 sucessos e 10 conflitos.
 Não há script de lint configurado nesta etapa.
+
+## Design system e catálogo visual
+
+Execute na raiz, com Bun e Node 20.19+ ou 22.12+ instalados:
+
+```powershell
+bun install
+bun run dev:ui
+# Abra http://localhost:6006
+```
+
+Navegue pelo menu lateral ou pela busca. Alterne Sistema/Claro/Escuro, abra
+os exemplos de componentes e teste os padrões de overview, estoque e pipeline.
+Há controles de propriedades e viewport, exemplos de código e links diretos
+por história para revisão. O catálogo usa fixtures identificadas e funciona
+sem API, PostgreSQL, ERP ou arquivos `.env`.
+
+```powershell
+bun run build:ui
+bun run preview:ui
+# Serve o build em localhost:6006; pare dev:ui antes de usar essa porta.
+bun run test:ui
+```
+
+Os testes de interface usam Playwright e Google Chrome instalado, incluindo
+interações, teclado, axe, contraste e reflow. O build estático fica em
+`packages/ui/storybook-static/`. Veja a [API e guia de uso](packages/ui/README.md)
+e as [diretrizes do design system](docs/design-system/plan.md).
 
 ## Contratos e persistência
 
@@ -195,6 +229,10 @@ nas tarefas seguintes, junto aos parsers e validações criptográficas.
 | `bun run dev:api` | Iniciar Hub API com watch, porta 3000 |
 | `bun run dev:mock` | Reservado ao Mock ERP, porta 3002 (TASK-004) |
 | `bun run dev:web` | Reservado ao dashboard, porta 5173 (TASK-006) |
+| `bun run dev:ui` | Abrir catálogo interativo do design system, porta 6006 |
+| `bun run build:ui` | Gerar catálogo estático em packages/ui/storybook-static |
+| `bun run preview:ui` | Servir localmente o catálogo compilado, porta 6006 |
+| `bun run test:ui` | Verificar interação e acessibilidade no Chrome headless |
 | `bun run dev:all` | Iniciar os workspaces que possuírem script `dev` |
 
 O watch da API roda a partir da raiz e acompanha também os pacotes compartilhados.

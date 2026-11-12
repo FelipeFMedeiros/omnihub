@@ -11,3 +11,6 @@ __pycache__/
 .DS_Store
 Thumbs.db
 /output
+storybook-static/
+playwright-report/
+test-results/

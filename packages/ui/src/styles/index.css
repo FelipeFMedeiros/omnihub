@@ -1,0 +1,23 @@
+@import '@fontsource/inter/latin-400.css';
+@import '@fontsource/inter/latin-500.css';
+@import '@fontsource/inter/latin-600.css';
+@import 'tailwindcss';
+@import './tokens.css';
+@import './components.css';
+@theme inline {
+  --color-canvas: var(--color-background);
+  --color-panel: var(--color-surface);
+  --color-foreground: var(--color-text);
+  --color-primary: var(--color-action-primary);
+  --font-sans: var(--oh-font-sans);
+}
+@layer base {
+  html { font-family: var(--oh-font-sans); color: var(--color-text); background: var(--color-background); }
+  body { margin: 0; }
+  *, *::before, *::after { box-sizing: border-box; }
+  button, input, textarea, select { font: inherit; }
+  button:not(:disabled), [role='button']:not([aria-disabled='true']) { cursor: pointer; }
+  :focus-visible { outline: 3px solid var(--color-focus); outline-offset: 3px; }
+  button:disabled { cursor: not-allowed; }
+  ::selection { background: var(--color-selection); color: var(--color-text); }
+}

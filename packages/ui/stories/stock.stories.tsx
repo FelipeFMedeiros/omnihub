@@ -1,0 +1,10 @@
+import type { Meta, StoryObj } from '@storybook/react-vite';
+import { OperationDemo } from './patterns';
+const meta = { title:'Padrões Omnihub/Estoque',id:'padroes-estoque',component:OperationDemo,render:args => <OperationDemo key={args.initialState} {...args} />,args:{ initialArea:'inventory',initialState:'ready' },argTypes:{ initialState:{ control:'select',options:['ready','loading','empty','error','stale'] },initialArea:{ control:false },initialFailure:{ control:false } } } satisfies Meta<typeof OperationDemo>;
+export default meta;
+type Story = StoryObj<typeof meta>;
+export const Interativo: Story = { name:'Busca, saldos e detalhes' };
+export const Carregando: Story = { name:'Carregando',args:{ initialState:'loading' } };
+export const Vazio: Story = { name:'Vazio',args:{ initialState:'empty' } };
+export const Erro: Story = { name:'Erro recuperável',args:{ initialState:'error' } };
+export const Desatualizado: Story = { name:'Dados desatualizados',args:{ initialState:'stale' } };
