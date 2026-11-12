@@ -16,6 +16,8 @@
     "build:ui": "bun --filter @omnihub/ui build:storybook",
     "preview:ui": "bun --filter @omnihub/ui preview:storybook",
     "test:ui": "bun --filter @omnihub/ui test:ui",
+    "meli:authorize": "bun --env-file=.env packages/marketplace-adapters/scripts/meli.ts authorize",
+    "meli:smoke": "bun --env-file=.env packages/marketplace-adapters/scripts/meli.ts smoke",
     "dev:all": "bun --filter '*' dev",
     "typecheck": "bun --filter '*' typecheck",
     "test": "bun test",

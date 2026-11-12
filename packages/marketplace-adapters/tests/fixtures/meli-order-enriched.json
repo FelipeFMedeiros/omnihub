@@ -1,0 +1,32 @@
+{
+  "order": {
+    "id": "2000000000000002", "status": "paid", "date_created": "2026-11-01T13:30:00Z",
+    "currency_id": "BRL", "total_amount": "39.98", "context": { "site": "MLB" },
+    "buyer": { "id": 900000002, "billing_info": { "id": "700000001" } },
+    "seller": { "id": 900000001 }, "shipping": { "id": "800000001" },
+    "order_items": [
+      {
+        "item": { "id": "MLB1234567890", "title": "Produto sintético", "variation_id": 12345, "seller_sku": null },
+        "quantity": 2, "unit_price": "19.99", "currency_id": "BRL"
+      }
+    ]
+  },
+  "shipment": {
+    "id": 800000001,
+    "destination": {
+      "receiver_id": 900000002, "receiver_name": "Comprador Sintetico", "receiver_phone": "11900000000",
+      "shipping_address": {
+        "street_name": "Rua de Teste", "street_number": 100,
+        "zip_code": "01001-000", "city": { "name": "São Paulo" },
+        "state": { "id": "BR-SP" }, "neighborhood": { "name": "Centro" },
+        "country": { "id": "BR" }
+      }
+    }
+  },
+  "billingInfo": {
+    "site_id": "MLB",
+    "buyer": { "cust_id": 900000002, "billing_info": { "name": "Comprador", "last_name": "Sintetico", "identification": { "type": "CPF", "number": "123.456.789-01" } } },
+    "seller": { "cust_id": 900000001 }
+  },
+  "buyerProfile": { "id": 900000002, "email": "comprador@example.invalid" }
+}

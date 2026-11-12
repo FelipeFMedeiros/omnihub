@@ -41,6 +41,14 @@
         "drizzle-kit": "~0.31.4",
       },
     },
+    "packages/marketplace-adapters": {
+      "name": "@omnihub/marketplace-adapters",
+      "version": "0.1.0",
+      "dependencies": {
+        "@omnihub/canonical-ir": "workspace:*",
+        "@sinclair/typebox": "^0.34.41",
+      },
+    },
     "packages/tsconfig": {
       "name": "@omnihub/tsconfig",
       "version": "0.0.0",
@@ -215,6 +223,8 @@
     "@omnihub/canonical-ir": ["@omnihub/canonical-ir@workspace:packages/canonical-ir"],
 
     "@omnihub/database": ["@omnihub/database@workspace:packages/database"],
+
+    "@omnihub/marketplace-adapters": ["@omnihub/marketplace-adapters@workspace:packages/marketplace-adapters"],
 
     "@omnihub/tsconfig": ["@omnihub/tsconfig@workspace:packages/tsconfig"],
 

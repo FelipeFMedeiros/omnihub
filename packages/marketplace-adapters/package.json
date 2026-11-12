@@ -1,0 +1,12 @@
+{
+  "name": "@omnihub/marketplace-adapters",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": { ".": "./src/index.ts" },
+  "scripts": { "typecheck": "tsc --project tsconfig.json" },
+  "dependencies": {
+    "@omnihub/canonical-ir": "workspace:*",
+    "@sinclair/typebox": "^0.34.41"
+  }
+}

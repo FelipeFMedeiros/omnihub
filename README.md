@@ -8,8 +8,9 @@ essa base visual; a TASK-006 integrará o dashboard aos contratos reais da API.
 Hub omnichannel com Representação Intermediária (IR), desenvolvido como PoC do TCC.
 As TASK-001 e TASK-002 entregam os contratos canônicos com TypeBox, persistência
 Drizzle/PostgreSQL 17, Hub API em Elysia e motor transacional de estoque.
-Adaptadores, despacho para ERP, segurança administrativa, dashboard e previsão
-ARIMA estão previstos nas próximas tarefas.
+A TASK-003 entrega o [adaptador Mercado Livre](packages/marketplace-adapters/README.md),
+com parser puro, cliente de leitura e helper OAuth. Despacho para ERP, segurança
+administrativa, dashboard, ARIMA e os demais canais entram nas próximas tarefas.
 
 Pré-requisitos desta etapa: **Bun 1.4+**, **Docker** e **Docker Compose**.
 TypeScript fica na série **5.9**, Drizzle ORM na **0.45** e Drizzle Kit na **0.31**.
@@ -20,6 +21,7 @@ O lockfile único é `bun.lock`, formato textual padrão do [Bun](https://bun.co
 apps/hub-api/              Elysia: estoque, ledger, saúde e OpenAPI (porta 3000)
 packages/canonical-ir/     Interfaces, schemas TypeBox e validação semântica
 packages/database/         Client, schema, migration, seed e testes de integração
+packages/marketplace-adapters/ Parser Mercado Livre, schemas, OAuth e leitura oficial
 packages/ui/               Tokens, componentes React e catálogo Storybook (6006)
 packages/tsconfig/         TypeScript estrito compartilhado
 docker/docker-compose.yml  PostgreSQL 17 Alpine com volume e healthcheck
@@ -42,9 +44,10 @@ O `.env.example` contém somente credenciais locais e placeholders. O `.env` rea
 é ignorado pelo Git e nunca deve ser enviado ao repositório ou ao cofre.
 Os scripts `db:*` e `docker:*` carregam explicitamente o `.env` da raiz.
 
-O banco fica em `localhost:5432`, acessível apenas pelo loopback. Se essa porta
+O exemplo publica o banco em `127.0.0.1:55432`, acessível apenas pelo loopback;
+dentro do contêiner, o PostgreSQL continua na porta `5432`. Se a porta do host
 estiver ocupada ou reservada pelo Windows, altere `POSTGRES_PORT` no `.env`
-(por exemplo, `55432`) e a porta nas duas URLs `DATABASE_URL` e `TEST_DATABASE_URL`.
+(por exemplo, `55433`) e a porta nas duas URLs `DATABASE_URL` e `TEST_DATABASE_URL`.
 Depois execute novamente `bun run docker:up`.
 
 Para usar o Compose diretamente com as variáveis locais:
@@ -121,7 +124,7 @@ Importe interfaces, schemas e `isCanonicalOrder` de `@omnihub/canonical-ir`.
 Valores monetários são inteiros não negativos em centavos; documentos e CEP
 devem chegar sem pontuação, e a UF deve conter duas letras maiúsculas.
 Os schemas rejeitam campos extras e não fazem sanitização. Ela pertence à borda
-dos futuros adaptadores. `createdAt`, `updatedAt` e `timestamp` são objetos `Date`
+dos adaptadores. `createdAt`, `updatedAt` e `timestamp` são objetos `Date`
 na IR em memória; as bordas devem converter as datas do JSON antes de validar.
 
 `CanonicalOrderSchema` valida a estrutura. `isCanonicalOrder` também exige que
@@ -213,6 +216,25 @@ Nesta etapa, a superfície HTTP oferece saúde, documentação e consultas. Os
 serviços de ingestão, cancelamento e reposição serão conectados aos webhooks
 nas tarefas seguintes, junto aos parsers e validações criptográficas.
 
+## Mercado Livre — autorização e leitura
+
+Preencha os placeholders `MELI_*` somente no `.env` local. O OAuth da aplicação
+Omnihub é separado do login do MCP. O Mercado Livre usa usuários de teste no
+ambiente oficial, sem sandbox isolado. O [guia do adaptador](packages/marketplace-adapters/README.md)
+explica redirect exato, encaminhamento HTTPS, PKCE e persistência privada de tokens.
+
+```powershell
+bun run meli:authorize
+bun run meli:smoke
+# Opcional, depois de verificar a conta de teste:
+bun run meli:smoke --order-id ID_DO_PEDIDO_DE_TESTE
+```
+
+O smoke exige vendedor brasileiro com tag `test_user` e salva relatório
+sanitizado em `output/task-003/`. Não cria usuários/pedidos e não confirma sozinho
+a normalização completa. Testes locais do parser/cliente não precisam de
+credenciais: `bun test packages/marketplace-adapters/tests`.
+
 ## Comandos disponíveis
 
 | Comando | Finalidade |
@@ -233,10 +255,18 @@ nas tarefas seguintes, junto aos parsers e validações criptográficas.
 | `bun run build:ui` | Gerar catálogo estático em packages/ui/storybook-static |
 | `bun run preview:ui` | Servir localmente o catálogo compilado, porta 6006 |
 | `bun run test:ui` | Verificar interação e acessibilidade no Chrome headless |
+| `bun run meli:authorize` | Autorizar a aplicação no helper OAuth local |
+| `bun run meli:smoke` | Verificar conta de teste e leitura oficial explícita |
 | `bun run dev:all` | Iniciar os workspaces que possuírem script `dev` |
 
 O watch da API roda a partir da raiz e acompanha também os pacotes compartilhados.
 Os scripts de Mock ERP e dashboard dependem das próximas tarefas.
+O `.env.example` separa configurações atuais das futuras. `PUBLIC_*`, `MOCK_ERP_*`
+e a conta compradora ainda não são consumidos pelo código atual; JWT/Turnstile
+serão configurados na TASK-005. Shopee será simulada localmente, sem chave oficial.
+O catálogo de UI não precisa de `.env`. Para Mercado Livre, o redirect é uma URL
+de retorno cadastrada por você, o vendedor é o ID de um usuário de teste criado
+pelo fluxo oficial e o refresh é obtido no OAuth, não copiado do DevCenter/MCP.
 Segredos de backend, como `JWT_SECRET`, `SHOPEE_PARTNER_KEY` e
 `CLOUDFLARE_TURNSTILE_SECRET_KEY`, nunca devem usar prefixo `VITE_`, pois esse
 prefixo torna a variável pública no bundle do futuro dashboard.

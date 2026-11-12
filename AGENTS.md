@@ -3,7 +3,7 @@ project: ominihub
 type: agent-guide
 status: active
 created_at: "2026-10-27"
-updated_at: "2026-10-27"
+updated_at: "2026-11-12"
 ---
 
 # Orientações para agentes — Omnihub
@@ -55,6 +55,7 @@ Bun 1.4+, TypeScript 5.9, Elysia 1.4, schemas `t`/TypeBox, Drizzle ORM 0.45 e Po
 - Idempotência e auditoria: valide `(source, external_order_id)` em `canonical_orders` (retornando `200 OK` sem nova baixa em duplicatas), salve o JSON original em `raw_payload` e grave toda movimentação em `inventory_ledger` na mesma transação.
 - Proibido executar chamadas HTTP externas (`mock-erp` ou atualização de estoque nos spokes) dentro de `db.transaction`. Comite no PostgreSQL antes de iniciar o despacho.
 - Webhooks (`/api/webhooks/:marketplace`): valide assinaturas criptográficas (`HMAC-SHA256` na Shopee, `SigV4` na Amazon) com `crypto.timingSafeEqual` sobre o corpo bruto antes do parser. Nunca exija Cloudflare Turnstile em rotas de webhook M2M.
+- Mercado Livre: não presuma HMAC de outro canal. O aviso `orders_v2` contém uma referência de recurso; valide app/vendedor e caminho, consulte o pedido no host oficial com OAuth e confira os vínculos dos recursos antes de normalizar. O parser da TASK-003 não autentica a origem do aviso nem constitui um handler HTTP; recebimento, deduplicação e processamento assíncrono entram na TASK-004. Contratos e limites em `packages/marketplace-adapters/README.md` e na spec `mercado-livre-primeira-integracao` do cofre.
 - Mock ERP (`apps/mock-erp`, porta 3002): emula latência ($250\text{ ms}$–$600\text{ ms}$) e $5\%$ de erro `503`. O `ErpDispatchService` deve aplicar retry com exponential backoff + jitter (até 3 tentativas) mantendo a reserva ativa.
 
 ## FRONTEND

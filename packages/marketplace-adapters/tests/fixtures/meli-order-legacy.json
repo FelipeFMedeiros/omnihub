@@ -1,0 +1,31 @@
+{
+  "id": 2000000000000001,
+  "status": "paid",
+  "date_created": "2026-11-01T10:30:00.000-03:00",
+  "currency_id": "BRL",
+  "total_amount": 39.98,
+  "context": { "site": "MLB" },
+  "buyer": {
+    "id": 900000002,
+    "first_name": "Comprador",
+    "last_name": "Sintetico",
+    "email": "comprador@example.invalid",
+    "phone": { "area_code": "11", "number": "900000000" },
+    "billing_info": { "doc_type": "CPF", "doc_number": "123.456.789-01" }
+  },
+  "seller": { "id": 900000001 },
+  "shipping": {
+    "receiver_address": {
+      "street_name": "Rua de Teste", "street_number": "100",
+      "zip_code": "01001-000", "city": { "name": "São Paulo" },
+      "state": { "id": "BR-SP" }, "neighborhood": { "name": "Centro" },
+      "country": { "id": "BR" }, "comment": "Sala de teste"
+    }
+  },
+  "order_items": [
+    {
+      "item": { "id": "MLB1234567890", "title": "Produto sintético", "seller_sku": "SKU-EXTERNO" },
+      "quantity": 2, "unit_price": 19.99, "currency_id": "BRL"
+    }
+  ]
+}
