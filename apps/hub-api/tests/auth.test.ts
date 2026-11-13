@@ -240,19 +240,19 @@ describe.skipIf(!testDatabaseUrl)('conta HTTP com PostgreSQL dedicado', () => {
     expect(denied.headers.get('access-control-allow-origin')).toBeNull();
   });
 
-  test('sessão comum não acessa nenhum dado/mutação global ou OAuth administrativo', async () => {
+  test('sessão consulta somente seu negócio vazio; operador exige alvo e recusa navegador', async () => {
     const r = await register();
     const product = await fixture.product();
     const routes = ['/api/v1/inventory',`/api/v1/inventory/${product.sku}/ledger`, '/api/v1/dashboard/orders','/api/v1/dashboard/processings',`/api/v1/dashboard/processings/${Bun.randomUUIDv7()}`,
       '/api/v1/dashboard/mappings','/api/v1/dashboard/metrics','/api/v1/dashboard/connections'];
     for (const path of routes) {
-      const response = await r.h.request(path,{cookie:r.cookie}); expect(response.status).toBe(401);
+      const response = await r.h.request(path,{cookie:r.cookie}); expect(response.status).toBe(path.includes('/ledger') || /processings\//.test(path) ? 404 : 200);
       expect(await response.text()).not.toContain(product.sku);
     }
     for (const path of ['/api/v1/dashboard/mappings',`/api/v1/dashboard/processings/${Bun.randomUUIDv7()}/retry`,'/api/v1/dashboard/connections/check','/api/oauth/meli/start','/api/oauth/meli/smoke']) {
       expect((await r.h.request(path,{method:'POST',cookie:r.cookie,csrf:r.account.csrfToken})).status).toBe(403);
     }
-    expect((await r.h.request('/api/v1/inventory',{headers:{authorization:`Bearer ${operator}`}})).status).toBe(200);
+    expect((await r.h.request('/api/v1/inventory',{headers:{authorization:`Bearer ${operator}`,'x-workspace-id':fixture.context.workspaceId}})).status).toBe(200);
     expect((await r.h.request('/api/v1/inventory',{headers:{authorization:`Bearer ${operator}`,origin}})).status).toBe(403);
     expect((await r.h.request('/api/v1/inventory')).status).toBe(401);
   });

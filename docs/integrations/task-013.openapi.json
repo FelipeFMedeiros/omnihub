@@ -1,0 +1,3589 @@
+{
+  "info": {
+    "title": "Omnihub API",
+    "description": "Domínio isolado pelo workspace da sessão; conexão identifica a loja. Mutações exigem Origin, CSRF e X-Turnstile-Token (action domain_mutation, cdata csrfToken). CLI exige alvo explícito X-Workspace-Id.",
+    "version": "0.2.0"
+  },
+  "components": {
+    "securitySchemes": {
+      "bearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "description": "Somente CLI do operador local. Navegadores são recusados; nunca inserir este segredo na UI."
+      },
+      "sessionCookie": {
+        "type": "apiKey",
+        "in": "cookie",
+        "name": "omnihub_session",
+        "description": "Sessão HttpOnly; workspace resolvido pelo vínculo no servidor."
+      },
+      "csrfHeader": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "X-CSRF-Token",
+        "description": "CSRF da sessão autenticada em mutações de navegador."
+      },
+      "turnstileHeader": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "X-Turnstile-Token",
+        "description": "Desafio novo: action domain_mutation e cdata igual ao csrfToken da sessão."
+      },
+      "workspaceTarget": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "X-Workspace-Id",
+        "description": "Alvo explícito somente com bearer do operador pela CLI; não concede autorização por si só."
+      }
+    },
+    "schemas": {
+      "MeliNotification": {
+        "additionalProperties": true,
+        "type": "object",
+        "required": [
+          "resource",
+          "topic",
+          "user_id",
+          "application_id"
+        ],
+        "properties": {
+          "resource": {
+            "pattern": "^/orders/[1-9][0-9]*$",
+            "type": "string"
+          },
+          "topic": {
+            "const": "orders_v2",
+            "type": "string"
+          },
+          "user_id": {
+            "anyOf": [
+              {
+                "minLength": 1,
+                "maxLength": 100,
+                "pattern": "^[1-9][0-9]*$",
+                "type": "string"
+              },
+              {
+                "minimum": 1,
+                "maximum": 9007199254740991,
+                "type": "integer"
+              }
+            ]
+          },
+          "application_id": {
+            "anyOf": [
+              {
+                "minLength": 1,
+                "maxLength": 100,
+                "pattern": "^[1-9][0-9]*$",
+                "type": "string"
+              },
+              {
+                "minimum": 1,
+                "maximum": 9007199254740991,
+                "type": "integer"
+              }
+            ]
+          },
+          "attempts": {
+            "minimum": 1,
+            "type": "integer"
+          },
+          "sent": {
+            "type": "string"
+          },
+          "received": {
+            "type": "string"
+          }
+        },
+        "$id": "#/components/schemas/MeliNotification"
+      },
+      "ErpStockMovement": {
+        "type": "object",
+        "required": [
+          "movementId",
+          "sku",
+          "quantity"
+        ],
+        "properties": {
+          "movementId": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "sku": {
+            "minLength": 1,
+            "maxLength": 100,
+            "type": "string"
+          },
+          "quantity": {
+            "minimum": 1,
+            "maximum": 2147483647,
+            "anyOf": [
+              {
+                "format": "integer",
+                "default": 0,
+                "type": "string"
+              },
+              {
+                "minimum": 1,
+                "maximum": 2147483647,
+                "type": "integer"
+              }
+            ]
+          }
+        },
+        "$id": "#/components/schemas/ErpStockMovement"
+      }
+    }
+  },
+  "openapi": "3.1.2",
+  "paths": {
+    "/health": {
+      "get": {
+        "tags": [
+          "Health"
+        ],
+        "summary": "Verificar conectividade com PostgreSQL",
+        "responses": {
+          "200": {
+            "description": "Response for status 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "status",
+                    "database"
+                  ],
+                  "properties": {
+                    "status": {
+                      "const": "ok",
+                      "type": "string"
+                    },
+                    "database": {
+                      "const": "connected",
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Response for status 503",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "properties": {
+                        "code": {
+                          "const": "DATABASE_UNAVAILABLE",
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "operationId": "getHealth"
+      }
+    },
+    "/api/v1/inventory/": {
+      "get": {
+        "tags": [
+          "Inventory"
+        ],
+        "security": [
+          {
+            "sessionCookie": []
+          },
+          {
+            "bearerAuth": [],
+            "workspaceTarget": []
+          }
+        ],
+        "summary": "Consultar estoque canônico consolidado (workspace da sessão)",
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "minimum": 1,
+              "maximum": 100,
+              "default": 50,
+              "anyOf": [
+                {
+                  "format": "numeric",
+                  "default": 0,
+                  "type": "string"
+                },
+                {
+                  "minimum": 1,
+                  "maximum": 100,
+                  "default": 50,
+                  "type": "number"
+                }
+              ]
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "minimum": 0,
+              "maximum": 2147483647,
+              "default": 0,
+              "anyOf": [
+                {
+                  "format": "numeric",
+                  "default": 0,
+                  "type": "string"
+                },
+                {
+                  "minimum": 0,
+                  "maximum": 2147483647,
+                  "default": 0,
+                  "type": "number"
+                }
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Response for status 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "data",
+                    "limit",
+                    "offset"
+                  ],
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "required": [
+                          "id",
+                          "sku",
+                          "title",
+                          "basePriceCents",
+                          "currentStock",
+                          "reservedStock",
+                          "safetyStock",
+                          "updatedAt",
+                          "availableStock"
+                        ],
+                        "properties": {
+                          "id": {
+                            "minLength": 36,
+                            "maxLength": 36,
+                            "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$",
+                            "type": "string"
+                          },
+                          "sku": {
+                            "minLength": 1,
+                            "maxLength": 100,
+                            "type": "string"
+                          },
+                          "title": {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "basePriceCents": {
+                            "minimum": 0,
+                            "maximum": 9007199254740991,
+                            "type": "integer"
+                          },
+                          "currentStock": {
+                            "minimum": 0,
+                            "maximum": 9007199254740991,
+                            "type": "integer"
+                          },
+                          "reservedStock": {
+                            "minimum": 0,
+                            "maximum": 9007199254740991,
+                            "type": "integer"
+                          },
+                          "safetyStock": {
+                            "minimum": 0,
+                            "maximum": 9007199254740991,
+                            "type": "integer"
+                          },
+                          "updatedAt": {
+                            "format": "date-time",
+                            "type": "string"
+                          },
+                          "availableStock": {
+                            "minimum": 0,
+                            "anyOf": [
+                              {
+                                "format": "integer",
+                                "default": 0,
+                                "type": "string"
+                              },
+                              {
+                                "minimum": 0,
+                                "type": "integer"
+                              }
+                            ]
+                          }
+                        }
+                      }
+                    },
+                    "limit": {
+                      "anyOf": [
+                        {
+                          "format": "integer",
+                          "default": 0,
+                          "type": "string"
+                        },
+                        {
+                          "type": "integer"
+                        }
+                      ]
+                    },
+                    "offset": {
+                      "anyOf": [
+                        {
+                          "format": "integer",
+                          "default": 0,
+                          "type": "string"
+                        },
+                        {
+                          "type": "integer"
+                        }
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "operationId": "getApiV1Inventory"
+      }
+    },
+    "/api/v1/inventory/{sku}/ledger": {
+      "get": {
+        "tags": [
+          "Inventory"
+        ],
+        "security": [
+          {
+            "sessionCookie": []
+          },
+          {
+            "bearerAuth": [],
+            "workspaceTarget": []
+          }
+        ],
+        "summary": "Consultar histórico de movimentações por SKU (workspace da sessão)",
+        "parameters": [
+          {
+            "name": "sku",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "minLength": 1,
+              "maxLength": 100,
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "minimum": 1,
+              "maximum": 100,
+              "default": 50,
+              "anyOf": [
+                {
+                  "format": "numeric",
+                  "default": 0,
+                  "type": "string"
+                },
+                {
+                  "minimum": 1,
+                  "maximum": 100,
+                  "default": 50,
+                  "type": "number"
+                }
+              ]
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "minimum": 0,
+              "maximum": 2147483647,
+              "default": 0,
+              "anyOf": [
+                {
+                  "format": "numeric",
+                  "default": 0,
+                  "type": "string"
+                },
+                {
+                  "minimum": 0,
+                  "maximum": 2147483647,
+                  "default": 0,
+                  "type": "number"
+                }
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Response for status 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "data",
+                    "limit",
+                    "offset"
+                  ],
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "required": [
+                          "id",
+                          "productId",
+                          "sku",
+                          "delta",
+                          "reason",
+                          "availableAfter",
+                          "timestamp"
+                        ],
+                        "properties": {
+                          "id": {
+                            "minLength": 36,
+                            "maxLength": 36,
+                            "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$",
+                            "type": "string"
+                          },
+                          "productId": {
+                            "minLength": 36,
+                            "maxLength": 36,
+                            "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$",
+                            "type": "string"
+                          },
+                          "sku": {
+                            "minLength": 1,
+                            "maxLength": 100,
+                            "type": "string"
+                          },
+                          "orderId": {
+                            "minLength": 36,
+                            "maxLength": 36,
+                            "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$",
+                            "type": "string"
+                          },
+                          "delta": {
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991,
+                            "type": "integer"
+                          },
+                          "reason": {
+                            "type": "string",
+                            "enum": [
+                              "SALE",
+                              "CANCELLATION",
+                              "ERP_SYNC",
+                              "MANUAL_ADJUST",
+                              "FULFILLMENT"
+                            ]
+                          },
+                          "availableAfter": {
+                            "minimum": 0,
+                            "maximum": 9007199254740991,
+                            "type": "integer"
+                          },
+                          "timestamp": {
+                            "format": "date-time",
+                            "type": "string"
+                          }
+                        }
+                      }
+                    },
+                    "limit": {
+                      "anyOf": [
+                        {
+                          "format": "integer",
+                          "default": 0,
+                          "type": "string"
+                        },
+                        {
+                          "type": "integer"
+                        }
+                      ]
+                    },
+                    "offset": {
+                      "anyOf": [
+                        {
+                          "format": "integer",
+                          "default": 0,
+                          "type": "string"
+                        },
+                        {
+                          "type": "integer"
+                        }
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "operationId": "getApiV1InventoryBySkuLedger"
+      }
+    },
+    "/api/auth/register": {
+      "post": {
+        "tags": [
+          "Account"
+        ],
+        "summary": "Criar conta e workspace vazio",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "type": "object",
+                "required": [
+                  "email",
+                  "password",
+                  "name"
+                ],
+                "properties": {
+                  "email": {
+                    "minLength": 1,
+                    "maxLength": 320,
+                    "type": "string"
+                  },
+                  "password": {
+                    "minLength": 12,
+                    "maxLength": 128,
+                    "type": "string"
+                  },
+                  "turnstileToken": {
+                    "maxLength": 2048,
+                    "type": "string"
+                  },
+                  "name": {
+                    "minLength": 1,
+                    "maxLength": 120,
+                    "type": "string"
+                  }
+                }
+              }
+            },
+            "application/x-www-form-urlencoded": {
+              "schema": {
+                "additionalProperties": false,
+                "type": "object",
+                "required": [
+                  "email",
+                  "password",
+                  "name"
+                ],
+                "properties": {
+                  "email": {
+                    "minLength": 1,
+                    "maxLength": 320,
+                    "type": "string"
+                  },
+                  "password": {
+                    "minLength": 12,
+                    "maxLength": 128,
+                    "type": "string"
+                  },
+                  "turnstileToken": {
+                    "maxLength": 2048,
+                    "type": "string"
+                  },
+                  "name": {
+                    "minLength": 1,
+                    "maxLength": 120,
+                    "type": "string"
+                  }
+                }
+              }
+            },
+            "multipart/form-data": {
+              "schema": {
+                "additionalProperties": false,
+                "type": "object",
+                "required": [
+                  "email",
+                  "password",
+                  "name"
+                ],
+                "properties": {
+                  "email": {
+                    "minLength": 1,
+                    "maxLength": 320,
+                    "type": "string"
+                  },
+                  "password": {
+                    "minLength": 12,
+                    "maxLength": 128,
+                    "type": "string"
+                  },
+                  "turnstileToken": {
+                    "maxLength": 2048,
+                    "type": "string"
+                  },
+                  "name": {
+                    "minLength": 1,
+                    "maxLength": 120,
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Response for status 201",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "user",
+                    "workspace",
+                    "expiresAt",
+                    "csrfToken"
+                  ],
+                  "properties": {
+                    "user": {
+                      "type": "object",
+                      "required": [
+                        "id",
+                        "name",
+                        "email"
+                      ],
+                      "properties": {
+                        "id": {
+                          "format": "uuid",
+                          "type": "string"
+                        },
+                        "name": {
+                          "type": "string"
+                        },
+                        "email": {
+                          "type": "string"
+                        }
+                      }
+                    },
+                    "workspace": {
+                      "type": "object",
+                      "required": [
+                        "id",
+                        "name"
+                      ],
+                      "properties": {
+                        "id": {
+                          "format": "uuid",
+                          "type": "string"
+                        },
+                        "name": {
+                          "type": "string"
+                        }
+                      }
+                    },
+                    "expiresAt": {
+                      "format": "date-time",
+                      "type": "string"
+                    },
+                    "csrfToken": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Response for status 400",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Response for status 401",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Response for status 403",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Response for status 409",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Response for status 415",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Response for status 422",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Response for status 429",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Response for status 500",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Response for status 503",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "operationId": "postApiAuthRegister"
+      }
+    },
+    "/api/auth/login": {
+      "post": {
+        "tags": [
+          "Account"
+        ],
+        "summary": "Iniciar sessão curta",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "type": "object",
+                "required": [
+                  "email",
+                  "password"
+                ],
+                "properties": {
+                  "email": {
+                    "minLength": 1,
+                    "maxLength": 320,
+                    "type": "string"
+                  },
+                  "password": {
+                    "minLength": 1,
+                    "maxLength": 128,
+                    "type": "string"
+                  },
+                  "turnstileToken": {
+                    "maxLength": 2048,
+                    "type": "string"
+                  }
+                }
+              }
+            },
+            "application/x-www-form-urlencoded": {
+              "schema": {
+                "additionalProperties": false,
+                "type": "object",
+                "required": [
+                  "email",
+                  "password"
+                ],
+                "properties": {
+                  "email": {
+                    "minLength": 1,
+                    "maxLength": 320,
+                    "type": "string"
+                  },
+                  "password": {
+                    "minLength": 1,
+                    "maxLength": 128,
+                    "type": "string"
+                  },
+                  "turnstileToken": {
+                    "maxLength": 2048,
+                    "type": "string"
+                  }
+                }
+              }
+            },
+            "multipart/form-data": {
+              "schema": {
+                "additionalProperties": false,
+                "type": "object",
+                "required": [
+                  "email",
+                  "password"
+                ],
+                "properties": {
+                  "email": {
+                    "minLength": 1,
+                    "maxLength": 320,
+                    "type": "string"
+                  },
+                  "password": {
+                    "minLength": 1,
+                    "maxLength": 128,
+                    "type": "string"
+                  },
+                  "turnstileToken": {
+                    "maxLength": 2048,
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Response for status 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "user",
+                    "workspace",
+                    "expiresAt",
+                    "csrfToken"
+                  ],
+                  "properties": {
+                    "user": {
+                      "type": "object",
+                      "required": [
+                        "id",
+                        "name",
+                        "email"
+                      ],
+                      "properties": {
+                        "id": {
+                          "format": "uuid",
+                          "type": "string"
+                        },
+                        "name": {
+                          "type": "string"
+                        },
+                        "email": {
+                          "type": "string"
+                        }
+                      }
+                    },
+                    "workspace": {
+                      "type": "object",
+                      "required": [
+                        "id",
+                        "name"
+                      ],
+                      "properties": {
+                        "id": {
+                          "format": "uuid",
+                          "type": "string"
+                        },
+                        "name": {
+                          "type": "string"
+                        }
+                      }
+                    },
+                    "expiresAt": {
+                      "format": "date-time",
+                      "type": "string"
+                    },
+                    "csrfToken": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Response for status 400",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Response for status 401",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Response for status 403",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Response for status 409",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Response for status 415",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Response for status 422",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Response for status 429",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Response for status 500",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Response for status 503",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "operationId": "postApiAuthLogin"
+      }
+    },
+    "/api/auth/session": {
+      "get": {
+        "tags": [
+          "Account"
+        ],
+        "security": [
+          {
+            "sessionCookie": []
+          }
+        ],
+        "summary": "Consultar conta e CSRF da sessão",
+        "responses": {
+          "200": {
+            "description": "Response for status 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "user",
+                    "workspace",
+                    "expiresAt",
+                    "csrfToken"
+                  ],
+                  "properties": {
+                    "user": {
+                      "type": "object",
+                      "required": [
+                        "id",
+                        "name",
+                        "email"
+                      ],
+                      "properties": {
+                        "id": {
+                          "format": "uuid",
+                          "type": "string"
+                        },
+                        "name": {
+                          "type": "string"
+                        },
+                        "email": {
+                          "type": "string"
+                        }
+                      }
+                    },
+                    "workspace": {
+                      "type": "object",
+                      "required": [
+                        "id",
+                        "name"
+                      ],
+                      "properties": {
+                        "id": {
+                          "format": "uuid",
+                          "type": "string"
+                        },
+                        "name": {
+                          "type": "string"
+                        }
+                      }
+                    },
+                    "expiresAt": {
+                      "format": "date-time",
+                      "type": "string"
+                    },
+                    "csrfToken": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Response for status 400",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Response for status 401",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Response for status 403",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Response for status 409",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Response for status 415",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Response for status 422",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Response for status 429",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Response for status 500",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Response for status 503",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "operationId": "getApiAuthSession"
+      }
+    },
+    "/api/auth/logout": {
+      "post": {
+        "tags": [
+          "Account"
+        ],
+        "security": [
+          {
+            "sessionCookie": []
+          }
+        ],
+        "summary": "Revogar sessão e limpar cookie (204)",
+        "responses": {
+          "204": {
+            "description": "Response for status 204",
+            "content": {
+              "type": "void"
+            }
+          },
+          "400": {
+            "description": "Response for status 400",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Response for status 401",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Response for status 403",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Response for status 409",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Response for status 415",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Response for status 422",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Response for status 429",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Response for status 500",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Response for status 503",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "operationId": "postApiAuthLogout"
+      }
+    },
+    "/api/oauth/meli/start": {
+      "post": {
+        "tags": [
+          "OAuth"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Response for status 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "authorizationUrl",
+                    "expiresAt"
+                  ],
+                  "properties": {
+                    "authorizationUrl": {
+                      "type": "string"
+                    },
+                    "expiresAt": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "operationId": "postApiOauthMeliStart"
+      }
+    },
+    "/api/oauth/meli/callback": {
+      "get": {
+        "tags": [
+          "OAuth"
+        ],
+        "responses": {
+          "200": {
+            "description": "Response for status 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "authorized"
+                  ],
+                  "properties": {
+                    "authorized": {
+                      "type": "boolean"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "operationId": "getApiOauthMeliCallback"
+      }
+    },
+    "/api/oauth/meli/smoke": {
+      "post": {
+        "tags": [
+          "OAuth"
+        ],
+        "security": [
+          {
+            "sessionCookie": [],
+            "csrfHeader": [],
+            "turnstileHeader": []
+          },
+          {
+            "bearerAuth": [],
+            "workspaceTarget": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "externalOrderId": {
+                    "pattern": "^[1-9][0-9]{0,99}$",
+                    "type": "string"
+                  }
+                }
+              }
+            },
+            "application/x-www-form-urlencoded": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "externalOrderId": {
+                    "pattern": "^[1-9][0-9]{0,99}$",
+                    "type": "string"
+                  }
+                }
+              }
+            },
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "externalOrderId": {
+                    "pattern": "^[1-9][0-9]{0,99}$",
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Response for status 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "ok",
+                    "marketplace",
+                    "mode",
+                    "checkedAt",
+                    "identityMatches",
+                    "testUserVerified",
+                    "operations",
+                    "orderRead",
+                    "canonicalParsingVerified"
+                  ],
+                  "properties": {
+                    "ok": {
+                      "type": "boolean"
+                    },
+                    "marketplace": {
+                      "type": "string"
+                    },
+                    "mode": {
+                      "type": "string"
+                    },
+                    "checkedAt": {
+                      "type": "string"
+                    },
+                    "identityMatches": {
+                      "type": "boolean"
+                    },
+                    "testUserVerified": {
+                      "type": "boolean"
+                    },
+                    "operations": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "orderRead": {
+                      "type": "boolean"
+                    },
+                    "canonicalParsingVerified": {
+                      "type": "boolean"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "operationId": "postApiOauthMeliSmoke"
+      }
+    },
+    "/api/webhooks/meli": {
+      "post": {
+        "tags": [
+          "Webhooks"
+        ],
+        "description": "Adaptador valida app/conta/recurso; conexão é resolvida no servidor e o recurso é consultado com transporte autorizado.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MeliNotification"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Response for status 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "accepted",
+                    "processingId"
+                  ],
+                  "properties": {
+                    "accepted": {
+                      "type": "boolean"
+                    },
+                    "processingId": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "operationId": "postApiWebhooksMeli"
+      }
+    },
+    "/api/webhooks/erp-stock": {
+      "post": {
+        "tags": [
+          "Webhooks"
+        ],
+        "deprecated": true,
+        "description": "Sem destino inequívoco: fechado. Use /erp-stock/:destinationId com segredo exclusivo.",
+        "operationId": "postApiWebhooksErp-stock"
+      }
+    },
+    "/api/webhooks/erp-stock/{destinationId}": {
+      "post": {
+        "tags": [
+          "Webhooks"
+        ],
+        "description": "HMAC-SHA256 bruto em x-erp-signature; destino e workspace vêm do registro privado permitido pelo operador.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ErpStockMovement"
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "destinationId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Response for status 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "accepted",
+                    "movementId"
+                  ],
+                  "properties": {
+                    "accepted": {
+                      "type": "boolean"
+                    },
+                    "movementId": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "operationId": "postApiWebhooksErp-stockByDestinationId"
+      }
+    },
+    "/api/v1/dashboard/orders": {
+      "get": {
+        "tags": [
+          "Dashboard"
+        ],
+        "security": [
+          {
+            "sessionCookie": []
+          },
+          {
+            "bearerAuth": [],
+            "workspaceTarget": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "minimum": 1,
+              "maximum": 100,
+              "anyOf": [
+                {
+                  "format": "integer",
+                  "default": 0,
+                  "type": "string"
+                },
+                {
+                  "minimum": 1,
+                  "maximum": 100,
+                  "type": "integer"
+                }
+              ]
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "minimum": 0,
+              "maximum": 2147483647,
+              "anyOf": [
+                {
+                  "format": "integer",
+                  "default": 0,
+                  "type": "string"
+                },
+                {
+                  "minimum": 0,
+                  "maximum": 2147483647,
+                  "type": "integer"
+                }
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Response for status 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "data",
+                    "limit",
+                    "offset"
+                  ],
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "required": [
+                          "id",
+                          "connectionId",
+                          "source",
+                          "externalOrderId",
+                          "status",
+                          "totalAmountCents",
+                          "createdAt",
+                          "reservationState",
+                          "dispatchState",
+                          "attempts"
+                        ],
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "connectionId": {
+                            "nullable": true,
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "source": {
+                            "type": "string"
+                          },
+                          "externalOrderId": {
+                            "type": "string"
+                          },
+                          "status": {
+                            "type": "string"
+                          },
+                          "totalAmountCents": {
+                            "type": "number"
+                          },
+                          "createdAt": {
+                            "type": "string"
+                          },
+                          "reservationState": {
+                            "type": "string"
+                          },
+                          "dispatchState": {
+                            "type": "string"
+                          },
+                          "attempts": {
+                            "type": "number"
+                          }
+                        }
+                      }
+                    },
+                    "limit": {
+                      "type": "number"
+                    },
+                    "offset": {
+                      "type": "number"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "operationId": "getApiV1DashboardOrders"
+      }
+    },
+    "/api/v1/dashboard/processings": {
+      "get": {
+        "tags": [
+          "Dashboard"
+        ],
+        "security": [
+          {
+            "sessionCookie": []
+          },
+          {
+            "bearerAuth": [],
+            "workspaceTarget": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "minimum": 1,
+              "maximum": 100,
+              "anyOf": [
+                {
+                  "format": "integer",
+                  "default": 0,
+                  "type": "string"
+                },
+                {
+                  "minimum": 1,
+                  "maximum": 100,
+                  "type": "integer"
+                }
+              ]
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "minimum": 0,
+              "maximum": 2147483647,
+              "anyOf": [
+                {
+                  "format": "integer",
+                  "default": 0,
+                  "type": "string"
+                },
+                {
+                  "minimum": 0,
+                  "maximum": 2147483647,
+                  "type": "integer"
+                }
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Response for status 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "data",
+                    "limit",
+                    "offset"
+                  ],
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "required": [
+                          "connectionId",
+                          "id",
+                          "orderId",
+                          "source",
+                          "transportMode",
+                          "externalOrderId",
+                          "state",
+                          "outcome",
+                          "errorCode",
+                          "receiptCount",
+                          "createdAt",
+                          "finishedAt"
+                        ],
+                        "properties": {
+                          "connectionId": {
+                            "type": "string"
+                          },
+                          "id": {
+                            "type": "string"
+                          },
+                          "orderId": {
+                            "nullable": true,
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "source": {
+                            "type": "string"
+                          },
+                          "transportMode": {
+                            "type": "string"
+                          },
+                          "externalOrderId": {
+                            "type": "string"
+                          },
+                          "state": {
+                            "type": "string"
+                          },
+                          "outcome": {
+                            "nullable": true,
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "errorCode": {
+                            "nullable": true,
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "receiptCount": {
+                            "type": "number"
+                          },
+                          "createdAt": {
+                            "type": "string"
+                          },
+                          "finishedAt": {
+                            "nullable": true,
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          }
+                        }
+                      }
+                    },
+                    "limit": {
+                      "type": "number"
+                    },
+                    "offset": {
+                      "type": "number"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "operationId": "getApiV1DashboardProcessings"
+      }
+    },
+    "/api/v1/dashboard/processings/{id}/retry": {
+      "post": {
+        "tags": [
+          "Dashboard"
+        ],
+        "security": [
+          {
+            "sessionCookie": [],
+            "csrfHeader": [],
+            "turnstileHeader": []
+          },
+          {
+            "bearerAuth": [],
+            "workspaceTarget": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Response for status 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "processingId",
+                    "retryOf"
+                  ],
+                  "properties": {
+                    "processingId": {
+                      "type": "string"
+                    },
+                    "retryOf": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "operationId": "postApiV1DashboardProcessingsByIdRetry"
+      }
+    },
+    "/api/v1/dashboard/processings/{id}": {
+      "get": {
+        "tags": [
+          "Dashboard"
+        ],
+        "security": [
+          {
+            "sessionCookie": []
+          },
+          {
+            "bearerAuth": [],
+            "workspaceTarget": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Response for status 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "processingId",
+                    "connectionId",
+                    "orderId",
+                    "source",
+                    "transportMode",
+                    "state",
+                    "outcome",
+                    "errorCode",
+                    "createdAt",
+                    "finishedAt",
+                    "snapshots",
+                    "timingsMs",
+                    "dispatchState",
+                    "redacted",
+                    "timingScope",
+                    "attempts"
+                  ],
+                  "properties": {
+                    "processingId": {
+                      "type": "string"
+                    },
+                    "connectionId": {
+                      "type": "string"
+                    },
+                    "orderId": {
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "source": {
+                      "type": "string"
+                    },
+                    "transportMode": {
+                      "type": "string"
+                    },
+                    "state": {
+                      "type": "string"
+                    },
+                    "outcome": {
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "errorCode": {
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "createdAt": {
+                      "type": "string"
+                    },
+                    "finishedAt": {
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "snapshots": {
+                      "type": "object",
+                      "required": [
+                        "raw",
+                        "canonical",
+                        "erp"
+                      ],
+                      "properties": {
+                        "raw": {},
+                        "canonical": {},
+                        "erp": {}
+                      }
+                    },
+                    "timingsMs": {
+                      "nullable": true,
+                      "type": [
+                        "object",
+                        "null"
+                      ],
+                      "patternProperties": {
+                        "^(.*)$": {
+                          "type": "number"
+                        }
+                      }
+                    },
+                    "dispatchState": {
+                      "type": "string"
+                    },
+                    "redacted": {
+                      "type": "boolean"
+                    },
+                    "timingScope": {
+                      "type": "string"
+                    },
+                    "attempts": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "required": [
+                          "ordinal",
+                          "httpStatus",
+                          "outcome",
+                          "durationMs",
+                          "startedAt",
+                          "finishedAt"
+                        ],
+                        "properties": {
+                          "ordinal": {
+                            "type": "number"
+                          },
+                          "httpStatus": {
+                            "nullable": true,
+                            "type": [
+                              "number",
+                              "null"
+                            ]
+                          },
+                          "outcome": {
+                            "type": "string"
+                          },
+                          "durationMs": {
+                            "nullable": true,
+                            "type": [
+                              "number",
+                              "null"
+                            ]
+                          },
+                          "startedAt": {
+                            "type": "string"
+                          },
+                          "finishedAt": {
+                            "nullable": true,
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "operationId": "getApiV1DashboardProcessingsById"
+      }
+    },
+    "/api/v1/dashboard/mappings": {
+      "get": {
+        "tags": [
+          "Dashboard"
+        ],
+        "security": [
+          {
+            "sessionCookie": []
+          },
+          {
+            "bearerAuth": [],
+            "workspaceTarget": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "minimum": 1,
+              "maximum": 100,
+              "anyOf": [
+                {
+                  "format": "integer",
+                  "default": 0,
+                  "type": "string"
+                },
+                {
+                  "minimum": 1,
+                  "maximum": 100,
+                  "type": "integer"
+                }
+              ]
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "minimum": 0,
+              "maximum": 2147483647,
+              "anyOf": [
+                {
+                  "format": "integer",
+                  "default": 0,
+                  "type": "string"
+                },
+                {
+                  "minimum": 0,
+                  "maximum": 2147483647,
+                  "type": "integer"
+                }
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Response for status 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "data",
+                    "limit",
+                    "offset"
+                  ],
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "required": [
+                          "id",
+                          "workspaceId",
+                          "connectionId",
+                          "productId",
+                          "marketplace",
+                          "externalItemId",
+                          "externalVariantId",
+                          "externalSku",
+                          "syncEnabled",
+                          "lastSyncedAt",
+                          "lastSyncError",
+                          "lastSyncQuantity",
+                          "sku",
+                          "implementation"
+                        ],
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "workspaceId": {
+                            "type": "string"
+                          },
+                          "connectionId": {
+                            "type": "string"
+                          },
+                          "productId": {
+                            "type": "string"
+                          },
+                          "marketplace": {
+                            "type": "string"
+                          },
+                          "externalItemId": {
+                            "type": "string"
+                          },
+                          "externalVariantId": {
+                            "type": "string"
+                          },
+                          "externalSku": {
+                            "nullable": true,
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "syncEnabled": {
+                            "type": "string"
+                          },
+                          "lastSyncedAt": {
+                            "nullable": true,
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "lastSyncError": {
+                            "nullable": true,
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "lastSyncQuantity": {
+                            "nullable": true,
+                            "type": [
+                              "number",
+                              "null"
+                            ]
+                          },
+                          "sku": {
+                            "type": "string"
+                          },
+                          "implementation": {
+                            "type": "string"
+                          }
+                        }
+                      }
+                    },
+                    "limit": {
+                      "type": "number"
+                    },
+                    "offset": {
+                      "type": "number"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "operationId": "getApiV1DashboardMappings"
+      },
+      "post": {
+        "tags": [
+          "Dashboard"
+        ],
+        "security": [
+          {
+            "sessionCookie": [],
+            "csrfHeader": [],
+            "turnstileHeader": []
+          },
+          {
+            "bearerAuth": [],
+            "workspaceTarget": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "connectionId",
+                  "productId",
+                  "marketplace",
+                  "externalItemId",
+                  "syncEnabled"
+                ],
+                "properties": {
+                  "connectionId": {
+                    "format": "uuid",
+                    "type": "string"
+                  },
+                  "productId": {
+                    "format": "uuid",
+                    "type": "string"
+                  },
+                  "marketplace": {
+                    "const": "MERCADO_LIVRE",
+                    "type": "string"
+                  },
+                  "externalItemId": {
+                    "minLength": 1,
+                    "maxLength": 150,
+                    "type": "string"
+                  },
+                  "externalVariantId": {
+                    "maxLength": 100,
+                    "type": "string"
+                  },
+                  "syncEnabled": {
+                    "type": "string",
+                    "enum": [
+                      "Y",
+                      "N"
+                    ]
+                  }
+                }
+              }
+            },
+            "application/x-www-form-urlencoded": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "connectionId",
+                  "productId",
+                  "marketplace",
+                  "externalItemId",
+                  "syncEnabled"
+                ],
+                "properties": {
+                  "connectionId": {
+                    "format": "uuid",
+                    "type": "string"
+                  },
+                  "productId": {
+                    "format": "uuid",
+                    "type": "string"
+                  },
+                  "marketplace": {
+                    "const": "MERCADO_LIVRE",
+                    "type": "string"
+                  },
+                  "externalItemId": {
+                    "minLength": 1,
+                    "maxLength": 150,
+                    "type": "string"
+                  },
+                  "externalVariantId": {
+                    "maxLength": 100,
+                    "type": "string"
+                  },
+                  "syncEnabled": {
+                    "type": "string",
+                    "enum": [
+                      "Y",
+                      "N"
+                    ]
+                  }
+                }
+              }
+            },
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "connectionId",
+                  "productId",
+                  "marketplace",
+                  "externalItemId",
+                  "syncEnabled"
+                ],
+                "properties": {
+                  "connectionId": {
+                    "format": "uuid",
+                    "type": "string"
+                  },
+                  "productId": {
+                    "format": "uuid",
+                    "type": "string"
+                  },
+                  "marketplace": {
+                    "const": "MERCADO_LIVRE",
+                    "type": "string"
+                  },
+                  "externalItemId": {
+                    "minLength": 1,
+                    "maxLength": 150,
+                    "type": "string"
+                  },
+                  "externalVariantId": {
+                    "maxLength": 100,
+                    "type": "string"
+                  },
+                  "syncEnabled": {
+                    "type": "string",
+                    "enum": [
+                      "Y",
+                      "N"
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Response for status 201",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "id"
+                  ],
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "operationId": "postApiV1DashboardMappings"
+      }
+    },
+    "/api/v1/dashboard/metrics": {
+      "get": {
+        "tags": [
+          "Dashboard"
+        ],
+        "security": [
+          {
+            "sessionCookie": []
+          },
+          {
+            "bearerAuth": [],
+            "workspaceTarget": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "from",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "format": "date-time",
+              "type": "string"
+            }
+          },
+          {
+            "name": "to",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "format": "date-time",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Response for status 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "from",
+                    "to",
+                    "collectedAt",
+                    "windowBasis",
+                    "acceptedOrders",
+                    "receivedNotifications",
+                    "duplicateReceipts",
+                    "duplicateOrders",
+                    "stockRejections",
+                    "failedProcessings",
+                    "rejectedProcessings",
+                    "technicalFailures",
+                    "delivery",
+                    "durations",
+                    "transportModes",
+                    "units"
+                  ],
+                  "properties": {
+                    "from": {
+                      "type": "string"
+                    },
+                    "to": {
+                      "type": "string"
+                    },
+                    "collectedAt": {
+                      "type": "string"
+                    },
+                    "windowBasis": {
+                      "type": "string"
+                    },
+                    "acceptedOrders": {
+                      "type": "number"
+                    },
+                    "receivedNotifications": {
+                      "type": "number"
+                    },
+                    "duplicateReceipts": {
+                      "type": "number"
+                    },
+                    "duplicateOrders": {
+                      "type": "number"
+                    },
+                    "stockRejections": {
+                      "type": "number"
+                    },
+                    "failedProcessings": {
+                      "type": "number"
+                    },
+                    "rejectedProcessings": {
+                      "type": "number"
+                    },
+                    "technicalFailures": {
+                      "type": "number"
+                    },
+                    "delivery": {
+                      "type": "object",
+                      "required": [
+                        "confirmed",
+                        "eligibleOrders",
+                        "pendingOrFailed",
+                        "rate"
+                      ],
+                      "properties": {
+                        "confirmed": {
+                          "type": "number"
+                        },
+                        "eligibleOrders": {
+                          "type": "number"
+                        },
+                        "pendingOrFailed": {
+                          "type": "number"
+                        },
+                        "rate": {
+                          "nullable": true,
+                          "type": [
+                            "number",
+                            "null"
+                          ]
+                        }
+                      }
+                    },
+                    "durations": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "required": [
+                          "stage",
+                          "samples",
+                          "averageMs"
+                        ],
+                        "properties": {
+                          "stage": {
+                            "type": "string"
+                          },
+                          "samples": {
+                            "type": "number"
+                          },
+                          "averageMs": {
+                            "nullable": true,
+                            "type": [
+                              "number",
+                              "null"
+                            ]
+                          }
+                        }
+                      }
+                    },
+                    "transportModes": {
+                      "type": "object",
+                      "required": [
+                        "officialProcessings",
+                        "localFixtureProcessings"
+                      ],
+                      "properties": {
+                        "officialProcessings": {
+                          "type": "number"
+                        },
+                        "localFixtureProcessings": {
+                          "type": "number"
+                        }
+                      }
+                    },
+                    "units": {
+                      "type": "object",
+                      "required": [
+                        "counts",
+                        "duration",
+                        "rate"
+                      ],
+                      "properties": {
+                        "counts": {
+                          "type": "string"
+                        },
+                        "duration": {
+                          "type": "string"
+                        },
+                        "rate": {
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "operationId": "getApiV1DashboardMetrics"
+      }
+    },
+    "/api/v1/dashboard/connections": {
+      "get": {
+        "tags": [
+          "Dashboard"
+        ],
+        "security": [
+          {
+            "sessionCookie": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Response for status 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "data"
+                  ],
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "required": [
+                          "id",
+                          "name",
+                          "transportMode",
+                          "state",
+                          "status",
+                          "checkedAt",
+                          "latencyMs"
+                        ],
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "transportMode": {
+                            "type": "string"
+                          },
+                          "state": {
+                            "type": "string"
+                          },
+                          "status": {
+                            "type": "string"
+                          },
+                          "checkedAt": {
+                            "nullable": true,
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "latencyMs": {
+                            "nullable": true,
+                            "type": [
+                              "number",
+                              "null"
+                            ]
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "operationId": "getApiV1DashboardConnections"
+      }
+    },
+    "/api/v1/dashboard/connections/check": {
+      "post": {
+        "tags": [
+          "Dashboard"
+        ],
+        "security": [
+          {
+            "sessionCookie": [],
+            "csrfHeader": [],
+            "turnstileHeader": []
+          },
+          {
+            "bearerAuth": [],
+            "workspaceTarget": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Response for status 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "data"
+                  ],
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "required": [
+                          "id",
+                          "name",
+                          "transportMode",
+                          "state",
+                          "status",
+                          "checkedAt",
+                          "latencyMs"
+                        ],
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "transportMode": {
+                            "type": "string"
+                          },
+                          "state": {
+                            "type": "string"
+                          },
+                          "status": {
+                            "type": "string"
+                          },
+                          "checkedAt": {
+                            "nullable": true,
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "latencyMs": {
+                            "nullable": true,
+                            "type": [
+                              "number",
+                              "null"
+                            ]
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "operationId": "postApiV1DashboardConnectionsCheck"
+      }
+    }
+  }
+}

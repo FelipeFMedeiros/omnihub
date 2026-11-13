@@ -1,4 +1,5 @@
-import { eq } from 'drizzle-orm';
+import { LEGACY_WORKSPACE_ID, legacyConnectionId } from './legacy';
+import { and, eq } from 'drizzle-orm';
 import { createDatabase, type Database } from './client';
 import { products, spokeMappings } from './schema';
 
@@ -14,18 +15,18 @@ const marketplaces = ['MERCADO_LIVRE', 'SHOPEE', 'AMAZON'] as const;
 export async function seedDatabase(db: Pick<Database, 'transaction'>): Promise<void> {
   await db.transaction(async (tx) => {
     for (const [position, product] of catalog.entries()) {
-      await tx.insert(products).values(product).onConflictDoNothing({ target: products.sku });
-      const [stored] = await tx.select({ id: products.id }).from(products).where(eq(products.sku, product.sku));
+      await tx.insert(products).values({ ...product, workspaceId: LEGACY_WORKSPACE_ID }).onConflictDoNothing({ target: [products.workspaceId, products.sku] });
+      const [stored] = await tx.select({ id: products.id }).from(products).where(and(eq(products.workspaceId, LEGACY_WORKSPACE_ID), eq(products.sku, product.sku)));
       if (!stored) throw new Error(`Produto não encontrado após seed: ${product.sku}`);
 
       for (const marketplace of marketplaces) {
         await tx.insert(spokeMappings).values({
-          productId: stored.id,
+          workspaceId: LEGACY_WORKSPACE_ID, connectionId: legacyConnectionId(marketplace), productId: stored.id,
           marketplace,
           externalItemId: `sandbox-${marketplace.toLowerCase()}-${position + 1}`,
           externalSku: product.sku,
           syncEnabled: 'N', // IDs sintéticos não podem chegar ao gateway oficial.
-        }).onConflictDoNothing({ target: [spokeMappings.marketplace, spokeMappings.externalItemId, spokeMappings.externalVariantId] });
+        }).onConflictDoNothing({ target: [spokeMappings.workspaceId, spokeMappings.connectionId, spokeMappings.externalItemId, spokeMappings.externalVariantId] });
       }
     }
   });

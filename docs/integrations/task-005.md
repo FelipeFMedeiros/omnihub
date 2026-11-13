@@ -1,5 +1,10 @@
 # TASK-005 — Conta central e proteção de borda
 
+Evolução TASK-013: [domínio isolado por negócio/conexão](task-013.md) libera a
+sessão para seu próprio workspace. As restrições globais descritas abaixo são o
+contrato histórico da TASK-005; cadastro sem herança, sessão, CSRF e Turnstile
+permanecem preservados. A tarefa de isolamento aguarda QA independente.
+
 O backend oferece cadastro, login e sessão de conta. Cada cadastro cria usuário,
 workspace vazio e sessão na mesma transação. Nenhum cadastro recebe o estoque,
 pedidos, mapeamentos ou credenciais globais da TASK-004. O domínio continua

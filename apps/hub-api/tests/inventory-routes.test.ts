@@ -7,7 +7,7 @@ describe.skipIf(!testDatabaseUrl)('API de estoque com PostgreSQL isolado', () =>
   const fixture = databaseFixture();
   const token = 'test-inventory-operator-'.repeat(3);
   const request = (path: string, init?: RequestInit) => createApp({ db: fixture.db, runtime: { adminToken: token, webhookSecret: '', erpUrl: 'http://127.0.0.1:3306', mockAdminToken: '' } }).handle(new Request(`http://localhost${path}`, {
-    ...init, headers: { authorization: `Bearer ${token}`, ...init?.headers },
+    ...init, headers: { authorization: `Bearer ${token}`, 'x-workspace-id': fixture.context.workspaceId, ...init?.headers },
   }));
 
   test('health verifica conexão e docs expõem o contrato OpenAPI', async () => {
@@ -26,7 +26,7 @@ describe.skipIf(!testDatabaseUrl)('API de estoque com PostgreSQL isolado', () =>
 
   test('consulta saldo consolidado com margem de segurança e datas ISO', async () => {
     const product = await fixture.product(5, 2);
-    await new OrderIngestionService(fixture.db).ingest(fixture.order([{ sku: product.sku, quantity: 2 }]), {});
+    await new OrderIngestionService(fixture.db, fixture.context).ingest(fixture.order([{ sku: product.sku, quantity: 2 }]), {});
     const response = await request('/api/v1/inventory?limit=100');
     expect(response.status).toBe(200);
     const page = await response.json() as { data: { id: string; availableStock: number; currentStock: number; reservedStock: number; updatedAt: string }[] };
@@ -40,7 +40,7 @@ describe.skipIf(!testDatabaseUrl)('API de estoque com PostgreSQL isolado', () =>
   test('consulta histórico por SKU sem expor JSON ou dados de cliente', async () => {
     const product = await fixture.product();
     const order = fixture.order([{ sku: product.sku }]);
-    await new OrderIngestionService(fixture.db).ingest(order, { privateOriginal: 'sensitive' });
+    await new OrderIngestionService(fixture.db, fixture.context).ingest(order, { privateOriginal: 'sensitive' });
     const response = await request(`/api/v1/inventory/${encodeURIComponent(product.sku)}/ledger?limit=10`);
     expect(response.status).toBe(200);
     const text = await response.text();

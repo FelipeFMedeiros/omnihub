@@ -13,8 +13,9 @@ com parser puro, cliente de leitura e helper OAuth. A TASK-004 conecta a fila
 durável, reserva, Mock ERP e sincronização de saldo, com consultas operacionais.
 Veja o [guia do pipeline](docs/integrations/task-004.md). A TASK-005 implementa
 [conta, sessão HttpOnly, Turnstile e proteção de borda](docs/integrations/task-005.md).
-Sessões comuns acessam somente sua conta/workspace vazio; dados globais continuam
-restritos ao operador até a TASK-013. Interface operacional, conexões por conta,
+TASK-013 implementa [isolamento por negócio e conexão](docs/integrations/task-013.md)
+no backend, aguardando QA independente. Sessões acessam somente seu workspace;
+o legado permanece fechado, sem dono e sem herança no cadastro. Interface operacional, conexões por conta,
 ARIMA e os demais canais entram nas próximas tarefas.
 
 Pré-requisitos desta etapa: **Bun 1.4+**, **Docker** e **Docker Compose**.
@@ -160,8 +161,9 @@ As tabelas de domínio são `products`, `spoke_mappings`, `canonical_orders` e
 snapshots, entrega e orçamento de tentativas. As chaves UUID v7 são geradas pelo Bun nos inserts
 Drizzle; inserts SQL diretos precisam fornecer o ID. Timestamps usam fuso horário.
 Dinheiro e quantidades no PostgreSQL usam `integer` (limite de 2.147.483.647).
-Os índices únicos protegem SKU, `(marketplace, external_item_id, external_variant_id)` e
-`(source, external_order_id)`. Restrições `CHECK` impedem valores negativos e
+Os índices únicos protegem SKU por workspace, item/variação por conexão e
+pedido externo por conexão; MANUAL possui índice parcial próprio com conexão NULL.
+FKs compostas impedem referências entre negócios. Restrições `CHECK` impedem valores negativos e
 enumerações desconhecidas no banco.
 
 Pedidos preservam os itens canônicos em `items_payload` e o JSON original em
@@ -175,8 +177,8 @@ de delta, motivo, produto, pedido opcional e timestamp. `sku` da movimentação
 bun run dev:api
 # Em outro terminal:
 Invoke-RestMethod http://localhost:3000/health
-# Leituras de estoque/ledger agora exigem credencial privada de operador na CLI.
-# Nunca inserir HUB_ADMIN_TOKEN no navegador. Contrato e configuração: docs/integrations/task-005.md.
+# Estoque/ledger usam a sessão e seu workspace; CLI exige bearer + X-Workspace-Id.
+# Nunca inserir HUB_ADMIN_TOKEN no navegador. Contrato: docs/integrations/task-013.md.
 ```
 
 Documentação Scalar em `http://localhost:3000/docs`, contrato OpenAPI em
@@ -193,11 +195,12 @@ Com estoque físico 5, reservado 0 e margem 0, cinco vendas deixam físico 5,
 reservado 5 e **disponível 0**. Reduzir o físico e aumentar o reservado na mesma
 reserva descontaria o disponível duas vezes. O faturamento físico é integrado na TASK-004.
 
+Os serviços recebem contexto confiável no construtor, fora da IR.
 `OrderIngestionService.ingest(order, rawPayload)` recebe somente IR normalizada.
 Na mesma transação, insere o pedido, resolve os SKUs, agrega itens repetidos,
 reserva produtos em ordem lexical de UUID e grava `SALE` no ledger. Qualquer
 falta de saldo reverte o pedido inteiro com `409 INSUFFICIENT_CANONICAL_STOCK`.
-`ON CONFLICT` pela origem e identificador externo resolve também duplicatas
+`ON CONFLICT` pelo workspace/conexão e identificador externo (índice próprio para MANUAL) resolve também duplicatas
 simultâneas: a primeira criação retorna `status: 201`; as demais retornam o
 pedido original com `status: 200` e `duplicate: true`, preservando o JSON inicial.
 Esses valores são recibos internos do serviço. O webhook da TASK-004 confirma
@@ -230,6 +233,9 @@ Os handlers executáveis e suas consultas estão em `/docs`.
 
 ## Mercado Livre — autorização e leitura
 
+Desde TASK-013, o runtime padrão mantém a integração global desabilitada e não
+importa tokens de vendedor. A TASK-014 implementará OAuth/credenciais por conexão;
+os comandos abaixo descrevem o fluxo administrativo histórico das TASK-003/004.
 Preencha os placeholders `MELI_*` somente no `.env` local. O OAuth da aplicação
 Omnihub é separado do login do MCP. O Mercado Livre usa usuários de teste no
 ambiente oficial, sem sandbox isolado. O [guia do adaptador](packages/marketplace-adapters/README.md)

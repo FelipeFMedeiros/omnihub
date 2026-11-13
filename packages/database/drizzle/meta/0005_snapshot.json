@@ -1,0 +1,1907 @@
+{
+  "id": "8d703a55-9c7c-4228-8a4c-b42c0975d0de",
+  "prevId": "6942c6fa-df58-40da-b65d-798b454c0433",
+  "version": "7",
+  "dialect": "postgresql",
+  "tables": {
+    "public.auth_sessions": {
+      "name": "auth_sessions",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "user_id": {
+          "name": "user_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "issued_at": {
+          "name": "issued_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "expires_at": {
+          "name": "expires_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "revoked_at": {
+          "name": "revoked_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {
+        "auth_sessions_user_idx": {
+          "name": "auth_sessions_user_idx",
+          "columns": [
+            {
+              "expression": "user_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "auth_sessions_expiry_idx": {
+          "name": "auth_sessions_expiry_idx",
+          "columns": [
+            {
+              "expression": "expires_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "auth_sessions_user_id_users_id_fk": {
+          "name": "auth_sessions_user_id_users_id_fk",
+          "tableFrom": "auth_sessions",
+          "tableTo": "users",
+          "columnsFrom": [
+            "user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "auth_sessions_expiry_valid": {
+          "name": "auth_sessions_expiry_valid",
+          "value": "\"auth_sessions\".\"expires_at\" > \"auth_sessions\".\"issued_at\""
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.canonical_orders": {
+      "name": "canonical_orders",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "workspace_id": {
+          "name": "workspace_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "connection_id": {
+          "name": "connection_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "source": {
+          "name": "source",
+          "type": "varchar(30)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "external_order_id": {
+          "name": "external_order_id",
+          "type": "varchar(100)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "status": {
+          "name": "status",
+          "type": "varchar(30)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "total_amount_cents": {
+          "name": "total_amount_cents",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "customer_payload": {
+          "name": "customer_payload",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "shipping_payload": {
+          "name": "shipping_payload",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "items_payload": {
+          "name": "items_payload",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "raw_payload": {
+          "name": "raw_payload",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "orders_scope_id": {
+          "name": "orders_scope_id",
+          "columns": [
+            {
+              "expression": "workspace_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "orders_scope_connection_id": {
+          "name": "orders_scope_connection_id",
+          "columns": [
+            {
+              "expression": "workspace_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "connection_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "source_order_idx": {
+          "name": "source_order_idx",
+          "columns": [
+            {
+              "expression": "workspace_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "connection_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "external_order_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "where": "\"canonical_orders\".\"connection_id\" IS NOT NULL",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "manual_order_idx": {
+          "name": "manual_order_idx",
+          "columns": [
+            {
+              "expression": "workspace_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "external_order_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "where": "\"canonical_orders\".\"source\" = 'MANUAL' AND \"canonical_orders\".\"connection_id\" IS NULL",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "canonical_orders_workspace_id_workspaces_id_fk": {
+          "name": "canonical_orders_workspace_id_workspaces_id_fk",
+          "tableFrom": "canonical_orders",
+          "tableTo": "workspaces",
+          "columnsFrom": [
+            "workspace_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "order_connection_scope": {
+          "name": "order_connection_scope",
+          "tableFrom": "canonical_orders",
+          "tableTo": "connections",
+          "columnsFrom": [
+            "workspace_id",
+            "connection_id",
+            "source"
+          ],
+          "columnsTo": [
+            "workspace_id",
+            "id",
+            "platform"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "order_connection_origin": {
+          "name": "order_connection_origin",
+          "value": "(\"canonical_orders\".\"source\" = 'MANUAL' AND \"canonical_orders\".\"connection_id\" IS NULL) OR (\"canonical_orders\".\"source\" <> 'MANUAL' AND \"canonical_orders\".\"connection_id\" IS NOT NULL)"
+        },
+        "canonical_orders_total_nonnegative": {
+          "name": "canonical_orders_total_nonnegative",
+          "value": "\"canonical_orders\".\"total_amount_cents\" >= 0"
+        },
+        "canonical_orders_source_valid": {
+          "name": "canonical_orders_source_valid",
+          "value": "\"canonical_orders\".\"source\" IN ('MERCADO_LIVRE', 'SHOPEE', 'AMAZON', 'MANUAL')"
+        },
+        "canonical_orders_status_valid": {
+          "name": "canonical_orders_status_valid",
+          "value": "\"canonical_orders\".\"status\" IN ('PENDING', 'PAID', 'INVOICED', 'SHIPPED', 'DELIVERED', 'CANCELLED')"
+        },
+        "canonical_orders_items_nonempty": {
+          "name": "canonical_orders_items_nonempty",
+          "value": "jsonb_typeof(\"canonical_orders\".\"items_payload\") = 'array' AND jsonb_array_length(\"canonical_orders\".\"items_payload\") > 0"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.connections": {
+      "name": "connections",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "workspace_id": {
+          "name": "workspace_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "platform": {
+          "name": "platform",
+          "type": "varchar(30)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "transport_mode": {
+          "name": "transport_mode",
+          "type": "varchar(30)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "external_account_id": {
+          "name": "external_account_id",
+          "type": "varchar(150)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "state": {
+          "name": "state",
+          "type": "varchar(20)",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'DISABLED'"
+        },
+        "name": {
+          "name": "name",
+          "type": "varchar(120)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "connections_scope_id": {
+          "name": "connections_scope_id",
+          "columns": [
+            {
+              "expression": "workspace_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "connections_scope_channel": {
+          "name": "connections_scope_channel",
+          "columns": [
+            {
+              "expression": "workspace_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "platform",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "connections_scope_transport": {
+          "name": "connections_scope_transport",
+          "columns": [
+            {
+              "expression": "workspace_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "platform",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "transport_mode",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "connections_external_identity": {
+          "name": "connections_external_identity",
+          "columns": [
+            {
+              "expression": "platform",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "external_account_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "where": "\"connections\".\"external_account_id\" IS NOT NULL",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "connections_workspace_id_workspaces_id_fk": {
+          "name": "connections_workspace_id_workspaces_id_fk",
+          "tableFrom": "connections",
+          "tableTo": "workspaces",
+          "columnsFrom": [
+            "workspace_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "connections_platform": {
+          "name": "connections_platform",
+          "value": "\"connections\".\"platform\" IN ('MERCADO_LIVRE','SHOPEE','AMAZON')"
+        },
+        "connections_transport": {
+          "name": "connections_transport",
+          "value": "\"connections\".\"transport_mode\" IN ('LOCAL_FIXTURE','OFFICIAL_TEST_USER')"
+        },
+        "connections_state": {
+          "name": "connections_state",
+          "value": "\"connections\".\"state\" IN ('ACTIVE','DISABLED') AND (\"connections\".\"state\" <> 'ACTIVE' OR \"connections\".\"external_account_id\" IS NOT NULL)"
+        },
+        "connections_identity_nonempty": {
+          "name": "connections_identity_nonempty",
+          "value": "\"connections\".\"external_account_id\" IS NULL OR length(btrim(\"connections\".\"external_account_id\")) > 0"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.erp_attempts": {
+      "name": "erp_attempts",
+      "schema": "",
+      "columns": {
+        "workspace_id": {
+          "name": "workspace_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "erp_destination_id": {
+          "name": "erp_destination_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "order_id": {
+          "name": "order_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "ordinal": {
+          "name": "ordinal",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "http_status": {
+          "name": "http_status",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "outcome": {
+          "name": "outcome",
+          "type": "varchar(30)",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'STARTED'"
+        },
+        "duration_ms": {
+          "name": "duration_ms",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "started_at": {
+          "name": "started_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "finished_at": {
+          "name": "finished_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {
+        "erp_attempt_ordinal_idx": {
+          "name": "erp_attempt_ordinal_idx",
+          "columns": [
+            {
+              "expression": "order_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "ordinal",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "erp_attempts_workspace_id_workspaces_id_fk": {
+          "name": "erp_attempts_workspace_id_workspaces_id_fk",
+          "tableFrom": "erp_attempts",
+          "tableTo": "workspaces",
+          "columnsFrom": [
+            "workspace_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "attempt_dispatch_scope": {
+          "name": "attempt_dispatch_scope",
+          "tableFrom": "erp_attempts",
+          "tableTo": "erp_dispatches",
+          "columnsFrom": [
+            "workspace_id",
+            "erp_destination_id",
+            "order_id"
+          ],
+          "columnsTo": [
+            "workspace_id",
+            "erp_destination_id",
+            "order_id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "erp_attempt_ordinal_range": {
+          "name": "erp_attempt_ordinal_range",
+          "value": "\"erp_attempts\".\"ordinal\" BETWEEN 1 AND 3"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.erp_destinations": {
+      "name": "erp_destinations",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "workspace_id": {
+          "name": "workspace_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "config_key": {
+          "name": "config_key",
+          "type": "varchar(120)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "state": {
+          "name": "state",
+          "type": "varchar(20)",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'DISABLED'"
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "erp_destinations_scope_id": {
+          "name": "erp_destinations_scope_id",
+          "columns": [
+            {
+              "expression": "workspace_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "erp_destinations_one_active": {
+          "name": "erp_destinations_one_active",
+          "columns": [
+            {
+              "expression": "workspace_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "where": "\"erp_destinations\".\"state\" = 'ACTIVE'",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "erp_destinations_workspace_id_workspaces_id_fk": {
+          "name": "erp_destinations_workspace_id_workspaces_id_fk",
+          "tableFrom": "erp_destinations",
+          "tableTo": "workspaces",
+          "columnsFrom": [
+            "workspace_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "erp_destinations_config_key_unique": {
+          "name": "erp_destinations_config_key_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "config_key"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {
+        "erp_destinations_state": {
+          "name": "erp_destinations_state",
+          "value": "\"erp_destinations\".\"state\" IN ('ACTIVE','DISABLED')"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.erp_dispatches": {
+      "name": "erp_dispatches",
+      "schema": "",
+      "columns": {
+        "workspace_id": {
+          "name": "workspace_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "erp_destination_id": {
+          "name": "erp_destination_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "external_idempotency_key": {
+          "name": "external_idempotency_key",
+          "type": "varchar(300)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "order_id": {
+          "name": "order_id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "state": {
+          "name": "state",
+          "type": "varchar(20)",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'PENDING'"
+        },
+        "payload": {
+          "name": "payload",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "attempts": {
+          "name": "attempts",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "protocol": {
+          "name": "protocol",
+          "type": "varchar(250)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "lease_until": {
+          "name": "lease_until",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "error_code": {
+          "name": "error_code",
+          "type": "varchar(100)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "confirmed_at": {
+          "name": "confirmed_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {
+        "dispatch_scope_id": {
+          "name": "dispatch_scope_id",
+          "columns": [
+            {
+              "expression": "workspace_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "erp_destination_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "order_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "dispatch_external_key": {
+          "name": "dispatch_external_key",
+          "columns": [
+            {
+              "expression": "erp_destination_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "external_idempotency_key",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "erp_dispatches_workspace_id_workspaces_id_fk": {
+          "name": "erp_dispatches_workspace_id_workspaces_id_fk",
+          "tableFrom": "erp_dispatches",
+          "tableTo": "workspaces",
+          "columnsFrom": [
+            "workspace_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "dispatch_order_scope": {
+          "name": "dispatch_order_scope",
+          "tableFrom": "erp_dispatches",
+          "tableTo": "canonical_orders",
+          "columnsFrom": [
+            "workspace_id",
+            "order_id"
+          ],
+          "columnsTo": [
+            "workspace_id",
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "dispatch_erp_scope": {
+          "name": "dispatch_erp_scope",
+          "tableFrom": "erp_dispatches",
+          "tableTo": "erp_destinations",
+          "columnsFrom": [
+            "workspace_id",
+            "erp_destination_id"
+          ],
+          "columnsTo": [
+            "workspace_id",
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "erp_dispatch_attempts_budget": {
+          "name": "erp_dispatch_attempts_budget",
+          "value": "\"erp_dispatches\".\"attempts\" >= 0 AND \"erp_dispatches\".\"attempts\" <= 3"
+        },
+        "dispatch_payload_key": {
+          "name": "dispatch_payload_key",
+          "value": "jsonb_typeof(\"erp_dispatches\".\"payload\"->'codigo_pedido') = 'string' AND \"erp_dispatches\".\"payload\"->>'codigo_pedido' = \"erp_dispatches\".\"external_idempotency_key\""
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.inventory_ledger": {
+      "name": "inventory_ledger",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "workspace_id": {
+          "name": "workspace_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "erp_destination_id": {
+          "name": "erp_destination_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "product_id": {
+          "name": "product_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "order_id": {
+          "name": "order_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "delta": {
+          "name": "delta",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "reason": {
+          "name": "reason",
+          "type": "varchar(50)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "available_after": {
+          "name": "available_after",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "timestamp": {
+          "name": "timestamp",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "inventory_ledger_product_timestamp_idx": {
+          "name": "inventory_ledger_product_timestamp_idx",
+          "columns": [
+            {
+              "expression": "product_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "timestamp",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "inventory_ledger_order_idx": {
+          "name": "inventory_ledger_order_idx",
+          "columns": [
+            {
+              "expression": "order_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "inventory_ledger_workspace_id_workspaces_id_fk": {
+          "name": "inventory_ledger_workspace_id_workspaces_id_fk",
+          "tableFrom": "inventory_ledger",
+          "tableTo": "workspaces",
+          "columnsFrom": [
+            "workspace_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "ledger_product_scope": {
+          "name": "ledger_product_scope",
+          "tableFrom": "inventory_ledger",
+          "tableTo": "products",
+          "columnsFrom": [
+            "workspace_id",
+            "product_id"
+          ],
+          "columnsTo": [
+            "workspace_id",
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "ledger_order_scope": {
+          "name": "ledger_order_scope",
+          "tableFrom": "inventory_ledger",
+          "tableTo": "canonical_orders",
+          "columnsFrom": [
+            "workspace_id",
+            "order_id"
+          ],
+          "columnsTo": [
+            "workspace_id",
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "ledger_erp_scope": {
+          "name": "ledger_erp_scope",
+          "tableFrom": "inventory_ledger",
+          "tableTo": "erp_destinations",
+          "columnsFrom": [
+            "workspace_id",
+            "erp_destination_id"
+          ],
+          "columnsTo": [
+            "workspace_id",
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "inventory_ledger_available_nonnegative": {
+          "name": "inventory_ledger_available_nonnegative",
+          "value": "\"inventory_ledger\".\"available_after\" >= 0"
+        },
+        "inventory_ledger_reason_valid": {
+          "name": "inventory_ledger_reason_valid",
+          "value": "\"inventory_ledger\".\"reason\" IN ('SALE', 'CANCELLATION', 'ERP_SYNC', 'MANUAL_ADJUST', 'FULFILLMENT')"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.pipeline_jobs": {
+      "name": "pipeline_jobs",
+      "schema": "",
+      "columns": {
+        "workspace_id": {
+          "name": "workspace_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "connection_id": {
+          "name": "connection_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "erp_destination_id": {
+          "name": "erp_destination_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "source": {
+          "name": "source",
+          "type": "varchar(30)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "transport_mode": {
+          "name": "transport_mode",
+          "type": "varchar(30)",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'OFFICIAL_TEST_USER'"
+        },
+        "external_order_id": {
+          "name": "external_order_id",
+          "type": "varchar(100)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "fingerprint": {
+          "name": "fingerprint",
+          "type": "varchar(64)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "receipt_count": {
+          "name": "receipt_count",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 1
+        },
+        "order_id": {
+          "name": "order_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "state": {
+          "name": "state",
+          "type": "varchar(20)",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'QUEUED'"
+        },
+        "outcome": {
+          "name": "outcome",
+          "type": "varchar(30)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "error_code": {
+          "name": "error_code",
+          "type": "varchar(100)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "lease_until": {
+          "name": "lease_until",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "lease_token": {
+          "name": "lease_token",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "raw_snapshot": {
+          "name": "raw_snapshot",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "canonical_snapshot": {
+          "name": "canonical_snapshot",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "erp_snapshot": {
+          "name": "erp_snapshot",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "timings": {
+          "name": "timings",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "finished_at": {
+          "name": "finished_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {
+        "pipeline_jobs_state_idx": {
+          "name": "pipeline_jobs_state_idx",
+          "columns": [
+            {
+              "expression": "workspace_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "connection_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "source",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "transport_mode",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "state",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "created_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "jobs_fingerprint_scope": {
+          "name": "jobs_fingerprint_scope",
+          "columns": [
+            {
+              "expression": "workspace_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "connection_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "transport_mode",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "fingerprint",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "pipeline_jobs_workspace_id_workspaces_id_fk": {
+          "name": "pipeline_jobs_workspace_id_workspaces_id_fk",
+          "tableFrom": "pipeline_jobs",
+          "tableTo": "workspaces",
+          "columnsFrom": [
+            "workspace_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "job_connection_scope": {
+          "name": "job_connection_scope",
+          "tableFrom": "pipeline_jobs",
+          "tableTo": "connections",
+          "columnsFrom": [
+            "workspace_id",
+            "connection_id",
+            "source"
+          ],
+          "columnsTo": [
+            "workspace_id",
+            "id",
+            "platform"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "job_order_scope": {
+          "name": "job_order_scope",
+          "tableFrom": "pipeline_jobs",
+          "tableTo": "canonical_orders",
+          "columnsFrom": [
+            "workspace_id",
+            "connection_id",
+            "order_id"
+          ],
+          "columnsTo": [
+            "workspace_id",
+            "connection_id",
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "job_erp_scope": {
+          "name": "job_erp_scope",
+          "tableFrom": "pipeline_jobs",
+          "tableTo": "erp_destinations",
+          "columnsFrom": [
+            "workspace_id",
+            "erp_destination_id"
+          ],
+          "columnsTo": [
+            "workspace_id",
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.products": {
+      "name": "products",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "workspace_id": {
+          "name": "workspace_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "sku": {
+          "name": "sku",
+          "type": "varchar(100)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "title": {
+          "name": "title",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "base_price_cents": {
+          "name": "base_price_cents",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "current_stock": {
+          "name": "current_stock",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "reserved_stock": {
+          "name": "reserved_stock",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "safety_stock": {
+          "name": "safety_stock",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 2
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "products_scope_id": {
+          "name": "products_scope_id",
+          "columns": [
+            {
+              "expression": "workspace_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "products_workspace_sku": {
+          "name": "products_workspace_sku",
+          "columns": [
+            {
+              "expression": "workspace_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "sku",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "products_workspace_id_workspaces_id_fk": {
+          "name": "products_workspace_id_workspaces_id_fk",
+          "tableFrom": "products",
+          "tableTo": "workspaces",
+          "columnsFrom": [
+            "workspace_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "products_price_nonnegative": {
+          "name": "products_price_nonnegative",
+          "value": "\"products\".\"base_price_cents\" >= 0"
+        },
+        "products_stock_nonnegative": {
+          "name": "products_stock_nonnegative",
+          "value": "\"products\".\"current_stock\" >= 0 AND \"products\".\"reserved_stock\" >= 0 AND \"products\".\"safety_stock\" >= 0"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.spoke_mappings": {
+      "name": "spoke_mappings",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "workspace_id": {
+          "name": "workspace_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "connection_id": {
+          "name": "connection_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "product_id": {
+          "name": "product_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "marketplace": {
+          "name": "marketplace",
+          "type": "varchar(30)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "external_item_id": {
+          "name": "external_item_id",
+          "type": "varchar(150)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "external_variant_id": {
+          "name": "external_variant_id",
+          "type": "varchar(100)",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "''"
+        },
+        "external_sku": {
+          "name": "external_sku",
+          "type": "varchar(150)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "sync_enabled": {
+          "name": "sync_enabled",
+          "type": "varchar(1)",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'Y'"
+        },
+        "last_synced_at": {
+          "name": "last_synced_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "last_sync_error": {
+          "name": "last_sync_error",
+          "type": "varchar(100)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "last_sync_quantity": {
+          "name": "last_sync_quantity",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {
+        "marketplace_item_idx": {
+          "name": "marketplace_item_idx",
+          "columns": [
+            {
+              "expression": "workspace_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "connection_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "external_item_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "external_variant_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "spoke_mappings_product_idx": {
+          "name": "spoke_mappings_product_idx",
+          "columns": [
+            {
+              "expression": "product_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "spoke_mappings_workspace_id_workspaces_id_fk": {
+          "name": "spoke_mappings_workspace_id_workspaces_id_fk",
+          "tableFrom": "spoke_mappings",
+          "tableTo": "workspaces",
+          "columnsFrom": [
+            "workspace_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "mapping_product_scope": {
+          "name": "mapping_product_scope",
+          "tableFrom": "spoke_mappings",
+          "tableTo": "products",
+          "columnsFrom": [
+            "workspace_id",
+            "product_id"
+          ],
+          "columnsTo": [
+            "workspace_id",
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "mapping_connection_scope": {
+          "name": "mapping_connection_scope",
+          "tableFrom": "spoke_mappings",
+          "tableTo": "connections",
+          "columnsFrom": [
+            "workspace_id",
+            "connection_id",
+            "marketplace"
+          ],
+          "columnsTo": [
+            "workspace_id",
+            "id",
+            "platform"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "spoke_mappings_marketplace_valid": {
+          "name": "spoke_mappings_marketplace_valid",
+          "value": "\"spoke_mappings\".\"marketplace\" IN ('MERCADO_LIVRE', 'SHOPEE', 'AMAZON')"
+        },
+        "spoke_mappings_sync_enabled_valid": {
+          "name": "spoke_mappings_sync_enabled_valid",
+          "value": "\"spoke_mappings\".\"sync_enabled\" IN ('Y', 'N')"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.users": {
+      "name": "users",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "name": {
+          "name": "name",
+          "type": "varchar(120)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "email": {
+          "name": "email",
+          "type": "varchar(254)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "password_hash": {
+          "name": "password_hash",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "users_email_unique": {
+          "name": "users_email_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "email"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {
+        "users_email_normalized": {
+          "name": "users_email_normalized",
+          "value": "\"users\".\"email\" = lower(btrim(\"users\".\"email\"))"
+        },
+        "users_name_nonempty": {
+          "name": "users_name_nonempty",
+          "value": "length(btrim(\"users\".\"name\")) > 0"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.workspaces": {
+      "name": "workspaces",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "owner_id": {
+          "name": "owner_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "kind": {
+          "name": "kind",
+          "type": "varchar(20)",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'ACCOUNT'"
+        },
+        "name": {
+          "name": "name",
+          "type": "varchar(120)",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'Meu neg\u00f3cio'"
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "workspaces_owner_id_users_id_fk": {
+          "name": "workspaces_owner_id_users_id_fk",
+          "tableFrom": "workspaces",
+          "tableTo": "users",
+          "columnsFrom": [
+            "owner_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "workspaces_owner_id_unique": {
+          "name": "workspaces_owner_id_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "owner_id"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {
+        "workspaces_owner_kind": {
+          "name": "workspaces_owner_kind",
+          "value": "(\"workspaces\".\"kind\" = 'ACCOUNT' AND \"workspaces\".\"owner_id\" IS NOT NULL) OR (\"workspaces\".\"kind\" = 'LEGACY_CLOSED' AND \"workspaces\".\"owner_id\" IS NULL)"
+        }
+      },
+      "isRLSEnabled": false
+    }
+  },
+  "enums": {},
+  "schemas": {},
+  "sequences": {},
+  "roles": {},
+  "policies": {},
+  "views": {},
+  "_meta": {
+    "columns": {},
+    "schemas": {},
+    "tables": {}
+  }
+}

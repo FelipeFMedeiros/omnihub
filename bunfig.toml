@@ -1,0 +1,3 @@
+[test]
+# Generated evidence contains source snapshots, including copies of real tests.
+pathIgnorePatterns = ["output/**"]

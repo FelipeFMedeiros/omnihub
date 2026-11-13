@@ -6,6 +6,7 @@ import { decodeMeliOrder } from './schemas';
 export class MeliGateway implements SpokeGateway {
   readonly source = 'MERCADO_LIVRE' as const;
   constructor(private readonly client: MeliClient, private readonly applicationId: string, private readonly sellerId: string) {}
+  get externalAccountId() { return this.sellerId; }
   identifyNotification(raw: unknown) { return { source: this.source, externalOrderId: parseMeliOrderNotification(raw, { applicationId: this.applicationId, sellerId: this.sellerId }).orderId }; }
   async loadOrder(externalOrderId: string) {
     if (!(await this.checkConnection()).testUser) throw new AdapterError('ADAPTER_RESOURCE_MISMATCH', 'Pipeline habilitado somente para vendedor de teste brasileiro.', 403);

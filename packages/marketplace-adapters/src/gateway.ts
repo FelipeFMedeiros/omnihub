@@ -14,6 +14,7 @@ export interface LoadedSpokeOrder {
 }
 export interface SpokeGateway {
   readonly source: SpokeReference['source'];
+  readonly externalAccountId: string;
   identifyNotification(raw: unknown): SpokeReference;
   loadOrder(externalOrderId: string): Promise<LoadedSpokeOrder>;
   updateStock(mapping: SpokeMapping, availableQuantity: number): Promise<void>;

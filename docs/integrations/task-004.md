@@ -1,5 +1,10 @@
 # TASK-004 — Pipeline Mercado Livre, Mock ERP e operação local
 
+Evolução TASK-013: [isolamento por negócio/conexão](task-013.md) substitui o acesso
+global e o runtime global descritos abaixo. Sessões usam seu workspace, CLI exige
+alvo explícito, callback ERP exige destino e o runtime padrão não importa tokens
+Mercado Livre. As verificações históricas desta entrega permanecem preservadas.
+
 O Hub oferece OAuth e notificações na porta **3000**, compatível com o túnel
 HTTPS cadastrado pelo autor. O Mock ERP roda no loopback na **3002**. O pipeline
 foi verificado com recursos Mercado Livre sintéticos e transporte injetado,

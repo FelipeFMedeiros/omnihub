@@ -10,7 +10,9 @@ import { AdapterError } from '@omnihub/marketplace-adapters';
 import type { PipelineRuntime } from './config/runtime';
 import { pipelineRoutes } from './routes/pipeline.routes';
 import type { SecurityConfig } from './config/security';
-import { AuthService, requireAuthTransport, requireOperator, requireOrigin, sessionCookie } from './plugins/auth';
+import { AuthService, requireAuthTransport, requireOperator, requireOrigin, requireSensitiveAction, sessionCookie } from './plugins/auth';
+import { requireWorkspace, type WorkspaceContext } from './services/context';
+import { validateTargetBindings } from './config/runtime';
 import { clientIp, EdgeRateLimiter } from './plugins/rate-limit';
 import { createTurnstileVerifier, type SiteverifyFetch } from './plugins/turnstile';
 import { authRoutes } from './routes/auth.routes';
@@ -24,9 +26,19 @@ interface AppOptions {
 }
 
 export function createApp({ db, corsOrigins = ['http://localhost:5173'], runtime, security, siteverifyFetch }: AppOptions) {
-  const inventory = new InventoryService(db);
   const limiter = new EdgeRateLimiter();
   const auth = security ? new AuthService(db, security) : undefined;
+  const verifier = security ? createTurnstileVerifier(security, siteverifyFetch) : undefined;
+  const contexts = new WeakMap<Request, WorkspaceContext>();
+  const context = (request: Request) => {
+    const value = contexts.get(request);
+    if (!value) throw new HubError(401, 'UNAUTHENTICATED', 'Sessão exigida.');
+    return value;
+  };
+  validateTargetBindings(runtime?.erpTargets ?? []);
+  for (const pipeline of runtime?.pipelines ?? []) pipeline.publishStock = async skus => {
+    await Promise.all((runtime?.pipelines ?? []).filter(p => p.context.workspaceId === pipeline.context.workspaceId && p.transportMode === pipeline.transportMode).map(p => p.syncStock(skus)));
+  };
   return new Elysia()
     .onError(({ error, code, status, set, request }) => {
       if (security && error instanceof HubError && error.status === 401 && new URL(request.url).pathname.startsWith('/api/auth/')) set.headers['Set-Cookie'] = sessionCookie(security, '', true);
@@ -39,8 +51,8 @@ export function createApp({ db, corsOrigins = ['http://localhost:5173'], runtime
       console.error(JSON.stringify({ event: 'request_failed', code: 'INTERNAL_SERVER_ERROR' }));
       return status(500, { error: { code: 'INTERNAL_SERVER_ERROR', message: 'Falha interna ao processar a requisição.' } });
     })
-    .use(cors({ origin: [...corsOrigins], credentials: true, methods: ['GET', 'POST', 'OPTIONS'], allowedHeaders: ['Content-Type', 'Authorization', 'X-CSRF-Token'] }))
-    .onRequest(({ request, set, server }) => {
+    .use(cors({ origin: [...corsOrigins], credentials: true, methods: ['GET', 'POST', 'OPTIONS'], allowedHeaders: ['Content-Type', 'Authorization', 'X-CSRF-Token', 'X-Turnstile-Token'] }))
+    .onRequest(async ({ request, set, server }) => {
       // Elysia aceita a barra final: a política deve usar a mesma rota canônica.
       const path = new URL(request.url).pathname.replace(/\/+$/, '') || '/';
       if (path.startsWith('/api/')) { set.headers['Cache-Control'] = 'no-store'; set.headers['Referrer-Policy'] = 'no-referrer'; }
@@ -57,13 +69,34 @@ export function createApp({ db, corsOrigins = ['http://localhost:5173'], runtime
         if (!['GET', 'HEAD'].includes(request.method)) requireOrigin(request, corsOrigins);
         if (authenticating && request.headers.get('content-type')?.split(';')[0]?.trim().toLowerCase() !== 'application/json') throw new HubError(415, 'JSON_REQUIRED', 'Use application/json.');
       }
-      if (/^\/api\/v1(?:\/|$)/.test(path) || (path.startsWith('/api/oauth/') && path !== '/api/oauth/meli/callback')) requireOperator(request, runtime?.adminToken ?? '');
+      if (/^\/api\/v1(?:\/|$)/.test(path)) {
+        let scope: WorkspaceContext;
+        if (request.headers.has('authorization')) {
+          requireOperator(request, runtime?.adminToken ?? '');
+          const workspaceId = request.headers.get('x-workspace-id') ?? '';
+          if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(workspaceId)) throw new HubError(422, 'OPERATOR_WORKSPACE_REQUIRED', 'Informe alvo explícito de manutenção.');
+          scope = { workspaceId };
+        } else {
+          if (!auth || !security || !verifier) throw new HubError(401, 'UNAUTHENTICATED', 'Sessão exigida.');
+          requireAuthTransport(request, security);
+          const session = ['GET', 'HEAD'].includes(request.method) ? await auth.authenticate(request) : await requireSensitiveAction(request, auth, corsOrigins, verifier, {
+            token: request.headers.get('x-turnstile-token') ?? undefined, ip: clientIp(request, server?.requestIP(request)?.address, security), action: 'domain_mutation',
+          });
+          scope = { workspaceId: session.account.workspace.id };
+        }
+        await requireWorkspace(db, scope);
+        contexts.set(request, Object.freeze(scope));
+      }
+      if (path.startsWith('/api/oauth/') && path !== '/api/oauth/meli/callback') requireOperator(request, runtime?.adminToken ?? '');
     })
     .use(openapi({ path: '/docs', documentation: {
-      info: { title: 'Omnihub API', version: '0.1.0', description: 'Estoque canônico e histórico de movimentações.' },
+      info: { title: 'Omnihub API', version: '0.2.0', description: 'Domínio isolado pelo workspace da sessão; conexão identifica a loja. Mutações exigem Origin, CSRF e X-Turnstile-Token (action domain_mutation, cdata csrfToken). CLI exige alvo explícito X-Workspace-Id.' },
       components: { securitySchemes: {
         bearerAuth: { type: 'http', scheme: 'bearer', description: 'Somente CLI do operador local. Navegadores são recusados; nunca inserir este segredo na UI.' },
-        sessionCookie: { type: 'apiKey', in: 'cookie', name: 'omnihub_session', description: 'Sessão HttpOnly de conta; não concede acesso ao domínio global.' },
+        sessionCookie: { type: 'apiKey', in: 'cookie', name: 'omnihub_session', description: 'Sessão HttpOnly; workspace resolvido pelo vínculo no servidor.' },
+        csrfHeader: { type: 'apiKey', in: 'header', name: 'X-CSRF-Token', description: 'CSRF da sessão autenticada em mutações de navegador.' },
+        turnstileHeader: { type: 'apiKey', in: 'header', name: 'X-Turnstile-Token', description: 'Desafio novo: action domain_mutation e cdata igual ao csrfToken da sessão.' },
+        workspaceTarget: { type: 'apiKey', in: 'header', name: 'X-Workspace-Id', description: 'Alvo explícito somente com bearer do operador pela CLI; não concede autorização por si só.' },
       } },
     } }))
     .get('/health', async ({ status }) => {
@@ -79,7 +112,7 @@ export function createApp({ db, corsOrigins = ['http://localhost:5173'], runtime
         503: t.Object({ error: t.Object({ code: t.Literal('DATABASE_UNAVAILABLE'), message: t.String() }) }),
       }, detail: { tags: ['Health'], summary: 'Verificar conectividade com PostgreSQL' },
     })
-    .use(inventoryRoutes(inventory))
-    .use(auth && security ? authRoutes(auth, createTurnstileVerifier(security, siteverifyFetch)) : new Elysia())
-    .use(runtime ? pipelineRoutes(db, runtime) : new Elysia());
+    .use(inventoryRoutes(request => new InventoryService(db, context(request))))
+    .use(auth && verifier ? authRoutes(auth, verifier) : new Elysia())
+    .use(pipelineRoutes(db, runtime ?? { adminToken: '', webhookSecret: '', erpUrl: '', mockAdminToken: '' }, context));
 }

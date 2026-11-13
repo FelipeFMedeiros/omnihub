@@ -19,15 +19,15 @@ const page = <T extends typeof inventorySchema | typeof movementSchema>(item: T)
   data: t.Array(item), limit: t.Integer(), offset: t.Integer(),
 });
 
-export const inventoryRoutes = (inventory: Pick<InventoryService, 'listInventory' | 'getLedger'>) => new Elysia({ prefix: '/api/v1/inventory' })
-  .get('/', async ({ query }) => {
-    const result = await inventory.listInventory(query.limit ?? 50, query.offset ?? 0);
+export const inventoryRoutes = (inventory: (request: Request) => Pick<InventoryService, 'listInventory' | 'getLedger'>) => new Elysia({ prefix: '/api/v1/inventory' })
+  .get('/', async ({ query, request }) => {
+    const result = await inventory(request).listInventory(query.limit ?? 50, query.offset ?? 0);
     return { ...result, data: result.data.map((product) => ({ ...product, updatedAt: product.updatedAt.toISOString() })) };
-  }, { query, response: { 200: page(inventorySchema) }, detail: { tags: ['Inventory'], security: [{ bearerAuth: [] }], summary: 'Consultar estoque canônico consolidado (operador local)' } })
-  .get('/:sku/ledger', async ({ params, query }) => {
-    const result = await inventory.getLedger(params.sku, query.limit ?? 50, query.offset ?? 0);
+  }, { query, response: { 200: page(inventorySchema) }, detail: { tags: ['Inventory'], security: [{ sessionCookie: [] }, { bearerAuth: [], workspaceTarget: [] }], summary: 'Consultar estoque canônico consolidado (workspace da sessão)' } })
+  .get('/:sku/ledger', async ({ params, query, request }) => {
+    const result = await inventory(request).getLedger(params.sku, query.limit ?? 50, query.offset ?? 0);
     return { ...result, data: result.data.map((movement) => ({ ...movement, timestamp: movement.timestamp.toISOString() })) };
   }, {
     params: t.Object({ sku: t.String({ minLength: 1, maxLength: 100 }) }),
-    query, response: { 200: page(movementSchema) }, detail: { tags: ['Inventory'], security: [{ bearerAuth: [] }], summary: 'Consultar histórico de movimentações por SKU (operador local)' },
+    query, response: { 200: page(movementSchema) }, detail: { tags: ['Inventory'], security: [{ sessionCookie: [] }, { bearerAuth: [], workspaceTarget: [] }], summary: 'Consultar histórico de movimentações por SKU (workspace da sessão)' },
   });

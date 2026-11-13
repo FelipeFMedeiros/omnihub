@@ -19,10 +19,10 @@ export function decodeLegacyErpOrder(value: unknown): LegacyErpOrderPayload {
   if (!Number.isSafeInteger(total) || total !== cents(order.valor_total)) throw new AdapterError('IR_SEMANTIC_VALIDATION_ERROR', 'Total legado incompatível com os itens.');
   return order;
 }
-export function emitCanonicalOrderToLegacyErp(order: CanonicalOrder): LegacyErpOrderPayload {
+export function emitCanonicalOrderToLegacyErp(order: CanonicalOrder, externalIdempotencyKey?: string): LegacyErpOrderPayload {
   if (!isCanonicalOrder(order)) throw new AdapterError('IR_SEMANTIC_VALIDATION_ERROR', 'IR inválida para emissão.');
   return decodeLegacyErpOrder({
-    codigo_pedido: `${order.source}-${order.externalOrderId}`, origem_canal: order.source,
+    codigo_pedido: externalIdempotencyKey ?? `${order.source}-${order.externalOrderId}`, origem_canal: order.source,
     documento_cliente: order.customer.documentNumber, cep_entrega: order.shippingAddress.postalCode,
     uf_entrega: order.shippingAddress.state, valor_total: Number((order.totalAmountCents / 100).toFixed(2)),
     itens_pedido: order.items.map(item => ({ codigo_sku: item.sku, quantidade: item.quantity, preco_unitario: Number((item.unitPriceCents / 100).toFixed(2)) })),

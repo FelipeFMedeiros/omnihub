@@ -3,7 +3,7 @@ import { count, eq } from 'drizzle-orm';
 import { migrate } from 'drizzle-orm/postgres-js/migrator';
 import { fileURLToPath } from 'node:url';
 import {
-  canonicalOrders, createDatabase, inventoryLedger, products, spokeMappings, type Database,
+  LEGACY_WORKSPACE_ID, legacyConnectionId, canonicalOrders, createDatabase, inventoryLedger, products, spokeMappings, type Database,
 } from '../src';
 import { seedDatabase } from '../src/seed';
 import { requireTestDatabaseUrl } from './test-database';
@@ -35,7 +35,7 @@ describe.skipIf(!testUrl)('PostgreSQL isolado (TEST_DATABASE_URL)', () => {
   }
 
   async function insertProduct(tx: Transaction) {
-    const [product] = await tx.insert(products).values({
+    const [product] = await tx.insert(products).values({ workspaceId: LEGACY_WORKSPACE_ID,
       sku: `TEST-${Bun.randomUUIDv7()}`, title: 'Produto teste', basePriceCents: 100,
     }).returning();
     if (!product) throw new Error('Produto não inserido');
@@ -43,7 +43,7 @@ describe.skipIf(!testUrl)('PostgreSQL isolado (TEST_DATABASE_URL)', () => {
   }
 
   const order = () => ({
-    source: 'MANUAL' as const, externalOrderId: Bun.randomUUIDv7(), status: 'PAID' as const,
+    workspaceId: LEGACY_WORKSPACE_ID, source: 'MANUAL' as const, externalOrderId: Bun.randomUUIDv7(), status: 'PAID' as const,
     totalAmountCents: 100,
     customerPayload: { externalCustomerId: 'test', documentNumber: '12345678901', name: 'Teste', email: 'test@example.com' },
     shippingPayload: { street: 'Rua Teste', number: '1', neighborhood: 'Centro', city: 'Mossoró', state: 'RN', postalCode: '59600000' },
@@ -66,14 +66,14 @@ describe.skipIf(!testUrl)('PostgreSQL isolado (TEST_DATABASE_URL)', () => {
   test('SKU único', async () => {
     await withRollback(async (tx) => {
       const product = await insertProduct(tx);
-      await expect(tx.insert(products).values({ sku: product.sku, title: 'Duplicado', basePriceCents: 1 }).execute())
+      await expect(tx.insert(products).values({ workspaceId: LEGACY_WORKSPACE_ID, sku: product.sku, title: 'Duplicado', basePriceCents: 1 }).execute())
         .rejects.toThrow();
     });
   });
 
   test.each(['basePriceCents', 'currentStock', 'reservedStock', 'safetyStock'] as const)('rejeita %s negativo no banco', async (field) => {
     await withRollback(async (tx) => {
-      await expect(tx.insert(products).values({
+      await expect(tx.insert(products).values({ workspaceId: LEGACY_WORKSPACE_ID,
         sku: Bun.randomUUIDv7(), title: 'Inválido', basePriceCents: 100, [field]: -1,
       }).execute()).rejects.toThrow();
     });
@@ -82,13 +82,13 @@ describe.skipIf(!testUrl)('PostgreSQL isolado (TEST_DATABASE_URL)', () => {
   test('mapeamento único por canal e vínculo obrigatório com produto', async () => {
     await withRollback(async (tx) => {
       const product = await insertProduct(tx);
-      const mapping = { productId: product.id, marketplace: 'SHOPEE' as const, externalItemId: Bun.randomUUIDv7() };
+      const mapping = { workspaceId: LEGACY_WORKSPACE_ID, connectionId: legacyConnectionId('SHOPEE'), productId: product.id, marketplace: 'SHOPEE' as const, externalItemId: Bun.randomUUIDv7() };
       await tx.insert(spokeMappings).values(mapping);
-      await tx.insert(spokeMappings).values({ ...mapping, marketplace: 'AMAZON' });
+      await tx.insert(spokeMappings).values({ ...mapping, marketplace: 'AMAZON', connectionId: legacyConnectionId('AMAZON') });
       await expect(tx.insert(spokeMappings).values(mapping).execute()).rejects.toThrow();
     });
     await withRollback(async (tx) => {
-      await expect(tx.insert(spokeMappings).values({
+      await expect(tx.insert(spokeMappings).values({ workspaceId: LEGACY_WORKSPACE_ID, connectionId: legacyConnectionId('AMAZON'),
         productId: Bun.randomUUIDv7(), marketplace: 'AMAZON', externalItemId: Bun.randomUUIDv7(),
       }).execute()).rejects.toThrow();
     });
@@ -100,7 +100,7 @@ describe.skipIf(!testUrl)('PostgreSQL isolado (TEST_DATABASE_URL)', () => {
       const [stored] = await tx.insert(canonicalOrders).values(payload).returning();
       expect(stored?.rawPayload).toEqual(payload.rawPayload);
       expect(stored?.itemsPayload).toEqual(payload.itemsPayload);
-      await tx.insert(canonicalOrders).values({ ...payload, source: 'SHOPEE' });
+      await tx.insert(canonicalOrders).values({ ...payload, source: 'SHOPEE', connectionId: legacyConnectionId('SHOPEE') });
       await expect(tx.insert(canonicalOrders).values(payload).execute()).rejects.toThrow();
     });
   });
@@ -119,7 +119,7 @@ describe.skipIf(!testUrl)('PostgreSQL isolado (TEST_DATABASE_URL)', () => {
       const product = await insertProduct(tx);
       const [storedOrder] = await tx.insert(canonicalOrders).values(order()).returning();
       if (!storedOrder) throw new Error('Pedido não inserido');
-      const [movement] = await tx.insert(inventoryLedger).values({
+      const [movement] = await tx.insert(inventoryLedger).values({ workspaceId: LEGACY_WORKSPACE_ID,
         productId: product.id, orderId: storedOrder.id, delta: -1, reason: 'SALE', availableAfter: 0,
       }).returning();
       expect(movement?.delta).toBe(-1);

@@ -430,7 +430,7 @@ describe.skipIf(!testDatabaseUrl)('QA Independente TASK-005 — Segurança, Sess
   });
 
   // 9. Separação de Contas: Domínio Global Fechado para Sessão Comum
-  test('[QA-09] Sessão de usuário não acessa endpoints globais legados; token de operador rejeita navegador', async () => {
+  test('[QA-09/TASK-013] Sessão acessa somente seu workspace; operador exige alvo e rejeita navegador', async () => {
     const registered = await registerAccount();
     const h = registered.h;
     const product = await fixture.product(10, 2);
@@ -450,9 +450,9 @@ describe.skipIf(!testDatabaseUrl)('QA Independente TASK-005 — Segurança, Sess
       // 1. Acesso anônimo -> 401
       expect((await h.request(endpoint)).status).toBe(401);
 
-      // 2. Acesso com sessão de conta válida -> 401 (não concede acesso ao domínio global)
+      // TASK-013: sessão consulta seu próprio contexto vazio; UUID/SKU estrangeiro retorna 404.
       const sessionRes = await h.request(endpoint, { cookie: registered.cookie });
-      expect(sessionRes.status).toBe(401);
+      expect(sessionRes.status).toBe(endpoint.endsWith('/ledger') ? 404 : 200);
       const text = await sessionRes.text();
       expect(text).not.toContain(product.sku);
     }
@@ -497,7 +497,7 @@ describe.skipIf(!testDatabaseUrl)('QA Independente TASK-005 — Segurança, Sess
 
     // Token do operador via CLI (sem headers de navegador) deve ser APROVADO
     const cliOperatorRes = await h.request('/api/v1/inventory', {
-      headers: { authorization: `Bearer ${operatorToken}` },
+      headers: { authorization: `Bearer ${operatorToken}`, 'x-workspace-id': fixture.context.workspaceId },
     });
     expect(cliOperatorRes.status).toBe(200);
     const cliData = (await cliOperatorRes.json()) as { data: { sku: string }[] };

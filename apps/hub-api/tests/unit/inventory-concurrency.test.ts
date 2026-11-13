@@ -14,7 +14,7 @@ describe.skipIf(!testDatabaseUrl)('Motor de estoque com PostgreSQL isolado', () 
   test('15 reservas concorrentes sobre 5 unidades: 5 sucessos, 10 conflitos e disponível zero', async () => {
     const product = await fixture.product(5);
     const orders = await Promise.all(Array.from({ length: 15 }, () => fixture.storedOrder(product.sku)));
-    const inventory = new InventoryService(fixture.db);
+    const inventory = new InventoryService(fixture.db, fixture.context);
     const results = await Promise.allSettled(orders.map((order) => inventory.reserveStock(product.id, 1, order.id)));
     const successes = results.filter((result) => result.status === 'fulfilled');
     const failures = results.filter((result) => result.status === 'rejected');
@@ -35,7 +35,7 @@ describe.skipIf(!testDatabaseUrl)('Motor de estoque com PostgreSQL isolado', () 
 
   test('15 pedidos concorrentes persistem exatamente 5 pedidos e 5 movimentos', async () => {
     const product = await fixture.product(5);
-    const ingestion = new OrderIngestionService(fixture.db);
+    const ingestion = new OrderIngestionService(fixture.db, fixture.context);
     const orders = Array.from({ length: 15 }, () => fixture.order([{ sku: product.sku }]));
     const results = await Promise.allSettled(orders.map((order) => ingestion.ingest(order, { externalId: order.externalOrderId })));
     expect(results.filter((result) => result.status === 'fulfilled')).toHaveLength(5);
@@ -49,7 +49,7 @@ describe.skipIf(!testDatabaseUrl)('Motor de estoque com PostgreSQL isolado', () 
 
   test('duplicatas simultâneas retornam 1 criação e 14 recibos sem nova reserva', async () => {
     const product = await fixture.product(1);
-    const ingestion = new OrderIngestionService(fixture.db);
+    const ingestion = new OrderIngestionService(fixture.db, fixture.context);
     const externalOrderId = Bun.randomUUIDv7();
     const orders = Array.from({ length: 15 }, () => fixture.order([{ sku: product.sku }], { externalOrderId }));
     const results = await Promise.all(orders.map((order) => ingestion.ingest(order, { winningId: order.id })));
@@ -72,7 +72,7 @@ describe.skipIf(!testDatabaseUrl)('Motor de estoque com PostgreSQL isolado', () 
     const second = candidates[1]!;
     await fixture.db.update(products).set({ currentStock: 0 }).where(eq(products.id, second.id));
     const order = fixture.order([{ sku: second.sku }, { sku: first.sku, quantity: 2 }]);
-    await expect(new OrderIngestionService(fixture.db).ingest(order, { original: 'preserved only on success' }))
+    await expect(new OrderIngestionService(fixture.db, fixture.context).ingest(order, { original: 'preserved only on success' }))
       .rejects.toMatchObject({ status: 409, code: 'INSUFFICIENT_CANONICAL_STOCK' });
     expect((await balances(first.id))[0]?.reservedStock).toBe(0);
     expect(await ledger(first.id)).toHaveLength(0);
@@ -84,7 +84,7 @@ describe.skipIf(!testDatabaseUrl)('Motor de estoque com PostgreSQL isolado', () 
     const first = await fixture.product(2);
     const second = await fixture.product(2);
     const orders = [fixture.order([{ sku: first.sku }, { sku: second.sku }]), fixture.order([{ sku: second.sku }, { sku: first.sku }])];
-    const ingestion = new OrderIngestionService(fixture.db);
+    const ingestion = new OrderIngestionService(fixture.db, fixture.context);
     const results = await Promise.all(orders.map((order) => ingestion.ingest(order, { original: true })));
     expect(results.map((result) => result.status)).toEqual([201, 201]);
     expect((await balances(first.id))[0]?.reservedStock).toBe(2);
@@ -93,7 +93,7 @@ describe.skipIf(!testDatabaseUrl)('Motor de estoque com PostgreSQL isolado', () 
 
   test('agrega itens repetidos do mesmo SKU antes da reserva', async () => {
     const product = await fixture.product(3);
-    await new OrderIngestionService(fixture.db).ingest(fixture.order([
+    await new OrderIngestionService(fixture.db, fixture.context).ingest(fixture.order([
       { sku: product.sku }, { sku: product.sku, quantity: 2 },
     ]), { original: true });
     expect((await balances(product.id))[0]?.reservedStock).toBe(3);
@@ -102,7 +102,7 @@ describe.skipIf(!testDatabaseUrl)('Motor de estoque com PostgreSQL isolado', () 
 
   test('preserva margem de segurança por padrão e permite parametrização explícita', async () => {
     const product = await fixture.product(5, 2);
-    const ingestion = new OrderIngestionService(fixture.db);
+    const ingestion = new OrderIngestionService(fixture.db, fixture.context);
     await ingestion.ingest(fixture.order([{ sku: product.sku, quantity: 3 }]), { original: true });
     await expect(ingestion.ingest(fixture.order([{ sku: product.sku }]), { original: true }))
       .rejects.toMatchObject({ code: 'INSUFFICIENT_CANONICAL_STOCK' });
@@ -113,7 +113,7 @@ describe.skipIf(!testDatabaseUrl)('Motor de estoque com PostgreSQL isolado', () 
   test('reentrada direta da mesma reserva é idempotente e quantidade diferente conflita', async () => {
     const product = await fixture.product(2);
     const order = await fixture.storedOrder(product.sku);
-    const inventory = new InventoryService(fixture.db);
+    const inventory = new InventoryService(fixture.db, fixture.context);
     await Promise.all(Array.from({ length: 5 }, () => inventory.reserveStock(product.id, 1, order.id)));
     expect((await balances(product.id))[0]?.reservedStock).toBe(1);
     expect(await ledger(product.id)).toHaveLength(1);
@@ -122,18 +122,18 @@ describe.skipIf(!testDatabaseUrl)('Motor de estoque com PostgreSQL isolado', () 
 
   test('chave de idempotência distingue origens e protege colisão de UUID', async () => {
     const product = await fixture.product(3);
-    const ingestion = new OrderIngestionService(fixture.db);
+    const ingestion = new OrderIngestionService(fixture.db, fixture.context);
     const original = fixture.order([{ sku: product.sku }]);
     await ingestion.ingest(original, { original: true });
-    const other = fixture.order([{ sku: product.sku }], { source: 'SHOPEE', externalOrderId: original.externalOrderId });
-    expect((await ingestion.ingest(other, { original: true })).status).toBe(201);
+    const other = fixture.order([{ sku: product.sku }], { source: 'MERCADO_LIVRE', externalOrderId: original.externalOrderId });
+    expect((await new OrderIngestionService(fixture.db, fixture.workerContext).ingest(other, { original: true })).status).toBe(201);
     const conflicting = fixture.order([{ sku: product.sku }], { id: original.id });
     await expect(ingestion.ingest(conflicting, { original: false })).rejects.toMatchObject({ code: 'CANONICAL_ORDER_ID_CONFLICT' });
     expect((await balances(product.id))[0]?.reservedStock).toBe(2);
   });
 
   test('rejeita SKU desconhecido, IR inválida e estado sem reserva sem persistir pedido', async () => {
-    const ingestion = new OrderIngestionService(fixture.db);
+    const ingestion = new OrderIngestionService(fixture.db, fixture.context);
     const unknown = fixture.order([{ sku: 'UNKNOWN' }]);
     await expect(ingestion.ingest(unknown, {})).rejects.toMatchObject({ status: 422, code: 'CANONICAL_PRODUCT_NOT_FOUND' });
     const invalid = fixture.order([{ sku: 'UNKNOWN' }], { totalAmountCents: 0.5 });
@@ -148,14 +148,14 @@ describe.skipIf(!testDatabaseUrl)('Motor de estoque com PostgreSQL isolado', () 
   test.each([0, -1, 1.5, 2_147_483_648])('rejeita quantidade inválida %d sem movimentar estoque', async (quantity) => {
     const product = await fixture.product();
     const order = await fixture.storedOrder(product.sku);
-    await expect(new InventoryService(fixture.db).reserveStock(product.id, quantity, order.id))
+    await expect(new InventoryService(fixture.db, fixture.context).reserveStock(product.id, quantity, order.id))
       .rejects.toMatchObject({ status: 422, code: 'INVALID_STOCK_QUANTITY' });
     expect(await ledger(product.id)).toHaveLength(0);
   });
 
   test('cancelamentos simultâneos liberam reserva uma única vez e auditam delta positivo', async () => {
     const product = await fixture.product(3);
-    const ingestion = new OrderIngestionService(fixture.db);
+    const ingestion = new OrderIngestionService(fixture.db, fixture.context);
     const order = fixture.order([{ sku: product.sku, quantity: 2 }]);
     await ingestion.ingest(order, { original: true });
     const results = await Promise.all(Array.from({ length: 8 }, () => ingestion.cancel(order.source, order.externalOrderId)));
@@ -174,7 +174,7 @@ describe.skipIf(!testDatabaseUrl)('Motor de estoque com PostgreSQL isolado', () 
     candidates.sort((left, right) => left.id < right.id ? -1 : 1);
     const first = candidates[0]!;
     const second = candidates[1]!;
-    const ingestion = new OrderIngestionService(fixture.db);
+    const ingestion = new OrderIngestionService(fixture.db, fixture.context);
     const order = fixture.order([{ sku: first.sku }, { sku: second.sku }]);
     await ingestion.ingest(order, {});
     await fixture.db.update(products).set({ reservedStock: 0 }).where(eq(products.id, second.id));
@@ -189,7 +189,7 @@ describe.skipIf(!testDatabaseUrl)('Motor de estoque com PostgreSQL isolado', () 
 
   test('reposição ERP simultânea é idempotente pelo UUID da movimentação', async () => {
     const product = await fixture.product(1);
-    const inventory = new InventoryService(fixture.db);
+    const inventory = new InventoryService(fixture.db, fixture.context);
     const movementId = Bun.randomUUIDv7();
     const results = await Promise.all(Array.from({ length: 8 }, () => inventory.restock(product.id, 10, movementId)));
     expect(new Set(results.map((movement) => movement.id)).size).toBe(1);
@@ -202,7 +202,7 @@ describe.skipIf(!testDatabaseUrl)('Motor de estoque com PostgreSQL isolado', () 
   test('colisão de UUID em reposições de produtos diferentes reverte a operação perdedora', async () => {
     const first = await fixture.product(1);
     const second = await fixture.product(1);
-    const inventory = new InventoryService(fixture.db);
+    const inventory = new InventoryService(fixture.db, fixture.context);
     const movementId = Bun.randomUUIDv7();
     const results = await Promise.allSettled([inventory.restock(first.id, 10, movementId), inventory.restock(second.id, 10, movementId)]);
     expect(results.filter((result) => result.status === 'fulfilled')).toHaveLength(1);
