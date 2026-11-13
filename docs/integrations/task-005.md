@@ -173,8 +173,9 @@ snapshot e três tentativas ERP esgotadas do schema 0000–0003 ao adicionar 000
 A migration também foi aplicada do zero no banco de teste, e é reaplicável.
 Saídas sanitizadas e fonte exato da rodada estão em `output/task-005` e no log
 do cofre. TASK-005 foi concluída após QA independente: 228 testes aprovados,
-zero falhas/skips, typecheck e migrations em bancos dedicados. Código ainda na
-worktree task-005-auth, sem commit/merge/push. A rodada final e seus limites estão
+zero falhas/skips, typecheck e migrations em bancos dedicados. A implementação
+foi integrada e publicada na develop no commit 7404406a4fe1e375728232467648495198d7cd7e.
+A worktree task-005-auth foi removida após preservar os artefatos. A rodada final e seus limites estão
 em logs/2026-11-12-task-005-qa.md no cofre; telas, isolamento do domínio e conexões
 por usuário continuam nas TASK-006/013/014.
 
