@@ -11,6 +11,37 @@ export type JsonValue = null | boolean | number | string | JsonValue[] | { [key:
 const primaryId = () => uuid('id').primaryKey().$defaultFn(() => Bun.randomUUIDv7());
 const utc = (name: string) => timestamp(name, { withTimezone: true, mode: 'date' });
 
+/** Identidade da conta; não atribui propriedade às tabelas globais da PoC. */
+export const users = pgTable('users', {
+  id: primaryId(),
+  name: varchar('name', { length: 120 }).notNull(),
+  email: varchar('email', { length: 254 }).notNull().unique(),
+  passwordHash: text('password_hash').notNull(),
+  createdAt: utc('created_at').defaultNow().notNull(),
+}, table => [
+  check('users_email_normalized', sql`${table.email} = lower(btrim(${table.email}))`),
+  check('users_name_nonempty', sql`length(btrim(${table.name})) > 0`),
+]);
+
+export const workspaces = pgTable('workspaces', {
+  id: primaryId(),
+  ownerId: uuid('owner_id').notNull().unique().references(() => users.id, { onDelete: 'cascade' }),
+  name: varchar('name', { length: 120 }).notNull().default('Meu negócio'),
+  createdAt: utc('created_at').defaultNow().notNull(),
+});
+
+export const authSessions = pgTable('auth_sessions', {
+  id: primaryId(),
+  userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  issuedAt: utc('issued_at').notNull(),
+  expiresAt: utc('expires_at').notNull(),
+  revokedAt: utc('revoked_at'),
+}, table => [
+  index('auth_sessions_user_idx').on(table.userId),
+  index('auth_sessions_expiry_idx').on(table.expiresAt),
+  check('auth_sessions_expiry_valid', sql`${table.expiresAt} > ${table.issuedAt}`),
+]);
+
 export const products = pgTable('products', {
   id: primaryId(),
   sku: varchar('sku', { length: 100 }).notNull().unique(),

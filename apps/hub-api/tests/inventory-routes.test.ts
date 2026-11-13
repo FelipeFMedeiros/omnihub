@@ -5,7 +5,10 @@ import { databaseFixture, testDatabaseUrl } from './helpers';
 
 describe.skipIf(!testDatabaseUrl)('API de estoque com PostgreSQL isolado', () => {
   const fixture = databaseFixture();
-  const request = (path: string, init?: RequestInit) => createApp({ db: fixture.db }).handle(new Request(`http://localhost${path}`, init));
+  const token = 'test-inventory-operator-'.repeat(3);
+  const request = (path: string, init?: RequestInit) => createApp({ db: fixture.db, runtime: { adminToken: token, webhookSecret: '', erpUrl: 'http://127.0.0.1:3306', mockAdminToken: '' } }).handle(new Request(`http://localhost${path}`, {
+    ...init, headers: { authorization: `Bearer ${token}`, ...init?.headers },
+  }));
 
   test('health verifica conexão e docs expõem o contrato OpenAPI', async () => {
     const health = await request('/health');

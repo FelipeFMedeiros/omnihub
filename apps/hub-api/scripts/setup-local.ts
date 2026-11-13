@@ -2,7 +2,7 @@ import { randomBytes } from 'node:crypto';
 const file = Bun.file(new URL('../../../.env', import.meta.url));
 if (!await file.exists()) throw new Error('Copie .env.example para .env antes de configurar o ambiente local.');
 let text = await file.text(); const added: string[] = [];
-for (const key of ['HUB_ADMIN_TOKEN', 'MOCK_ERP_ADMIN_TOKEN', 'ERP_WEBHOOK_SECRET']) {
+for (const key of ['HUB_ADMIN_TOKEN', 'MOCK_ERP_ADMIN_TOKEN', 'ERP_WEBHOOK_SECRET', 'JWT_SECRET']) {
   const match = new RegExp(`^${key}=(.*)$`, 'm').exec(text);
   if (match?.[1]?.trim() && !/SUBSTITUIR|PLACEHOLDER/.test(match[1])) continue;
   const line = `${key}=${randomBytes(32).toString('base64url')}`;

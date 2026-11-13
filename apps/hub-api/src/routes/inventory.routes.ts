@@ -23,11 +23,11 @@ export const inventoryRoutes = (inventory: Pick<InventoryService, 'listInventory
   .get('/', async ({ query }) => {
     const result = await inventory.listInventory(query.limit ?? 50, query.offset ?? 0);
     return { ...result, data: result.data.map((product) => ({ ...product, updatedAt: product.updatedAt.toISOString() })) };
-  }, { query, response: { 200: page(inventorySchema) }, detail: { tags: ['Inventory'], summary: 'Consultar estoque canônico consolidado' } })
+  }, { query, response: { 200: page(inventorySchema) }, detail: { tags: ['Inventory'], security: [{ bearerAuth: [] }], summary: 'Consultar estoque canônico consolidado (operador local)' } })
   .get('/:sku/ledger', async ({ params, query }) => {
     const result = await inventory.getLedger(params.sku, query.limit ?? 50, query.offset ?? 0);
     return { ...result, data: result.data.map((movement) => ({ ...movement, timestamp: movement.timestamp.toISOString() })) };
   }, {
     params: t.Object({ sku: t.String({ minLength: 1, maxLength: 100 }) }),
-    query, response: { 200: page(movementSchema) }, detail: { tags: ['Inventory'], summary: 'Consultar histórico de movimentações por SKU' },
+    query, response: { 200: page(movementSchema) }, detail: { tags: ['Inventory'], security: [{ bearerAuth: [] }], summary: 'Consultar histórico de movimentações por SKU (operador local)' },
   });

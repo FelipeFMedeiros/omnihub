@@ -19,6 +19,7 @@
     "meli:authorize": "bun --env-file=.env packages/marketplace-adapters/scripts/meli.ts authorize",
     "meli:create-test-users": "bun --env-file=.env packages/marketplace-adapters/scripts/create-test-users.ts",
     "setup:local": "bun apps/hub-api/scripts/setup-local.ts",
+    "auth:turnstile-smoke": "bun --env-file=.env apps/hub-api/scripts/turnstile-smoke.ts",
     "meli:smoke": "bun --env-file=.env packages/marketplace-adapters/scripts/meli.ts smoke",
     "dev:all": "bun --filter '*' dev",
     "typecheck": "bun --filter '*' typecheck",

@@ -21,9 +21,9 @@ bun run db:seed
 ```
 
 `setup:local` gera somente credenciais locais ausentes: `HUB_ADMIN_TOKEN`,
-`MOCK_ERP_ADMIN_TOKEN` e `ERP_WEBHOOK_SECRET`. Não imprime os valores nem
-substitui credenciais existentes. São tokens de desenvolvimento; login/sessão
-JWT/Turnstile do dashboard entram na TASK-005. Não coloque esses valores em
+`MOCK_ERP_ADMIN_TOKEN`, `ERP_WEBHOOK_SECRET` e, desde TASK-005, `JWT_SECRET`.
+Não imprime os valores nem substitui credenciais existentes. Conta/sessão e
+Turnstile são descritos no [contrato TASK-005](task-005.md). Não coloque segredos em
 `VITE_*`, no Git, em logs ou no cofre.
 
 Em terminais separados:
@@ -36,9 +36,10 @@ bun run dev:mock
 bun run dev:api
 ```
 
-Abra `http://localhost:3000/docs`. Nas operações administrativas, use o botão
-**Authorize** com o `HUB_ADMIN_TOKEN` do `.env` local. As consultas antigas de
-estoque continuam disponíveis; dados pessoais não são enviados pelo inspetor.
+Abra `http://localhost:3000/docs` para ler schemas. Desde TASK-005, todas as
+operações globais, inclusive estoque/ledger, exigem `HUB_ADMIN_TOKEN` somente
+pela CLI do operador; navegador é recusado. Nunca inserir esse token no Scalar.
+Dados pessoais não são enviados pelo inspetor autorizado.
 Para o catálogo visual, execute `bun run dev:ui` e abra `localhost:6006`.
 O dashboard conectado continua na TASK-006.
 

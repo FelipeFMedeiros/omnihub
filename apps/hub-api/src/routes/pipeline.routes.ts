@@ -1,5 +1,4 @@
 import { Elysia, t } from 'elysia';
-import { timingSafeEqual } from 'node:crypto';
 import { MeliNotificationSchema, validateSpokeMapping, verifyInternalBody } from '@omnihub/marketplace-adapters';
 import { products, spokeMappings, type Database } from '@omnihub/database';
 import { eq, sql } from 'drizzle-orm';
@@ -7,6 +6,7 @@ import type { PipelineRuntime } from '../config/runtime';
 import { HubError } from '../errors';
 import { InventoryService } from '../services/inventory.service';
 import { OperationsService } from '../services/operations.service';
+import { requireOperator } from '../plugins/auth';
 
 const pagination = t.Object({ limit: t.Optional(t.Integer({ minimum: 1, maximum: 100 })), offset: t.Optional(t.Integer({ minimum: 0, maximum: 2147483647 })) });
 const nullableString = t.Nullable(t.String());
@@ -15,9 +15,7 @@ const jobSchema = t.Object({ id: t.String(), orderId: nullableString, source: t.
 const mappingBody = t.Object({ productId: t.String({ format: 'uuid' }), marketplace: t.Literal('MERCADO_LIVRE'), externalItemId: t.String({ minLength: 1, maxLength: 150 }), externalVariantId: t.Optional(t.String({ maxLength: 100 })), syncEnabled: t.Union([t.Literal('Y'),t.Literal('N')]) });
 const stockMovementBody = t.Object({movementId:t.String({format:'uuid'}),sku:t.String({minLength:1,maxLength:100}),quantity:t.Integer({minimum:1,maximum:2147483647})});
 export function requireAdmin(request: Request, token: string) {
-  if (token.length < 32) throw new HubError(503, 'LOCAL_ADMIN_NOT_CONFIGURED', 'Configure HUB_ADMIN_TOKEN para as operações locais.');
-  const expected = Buffer.from(`Bearer ${token}`), received = Buffer.from(request.headers.get('authorization') ?? '');
-  if (expected.length !== received.length || !timingSafeEqual(expected, received)) throw new HubError(401, 'UNAUTHORIZED', 'Credencial administrativa local exigida.');
+  requireOperator(request, token);
 }
 async function rawBody(request: Request): Promise<string> {
   if (!request.body) throw new HubError(400, 'INVALID_REQUEST_BODY', 'Corpo obrigatório.');

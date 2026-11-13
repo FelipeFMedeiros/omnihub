@@ -11,8 +11,11 @@ Drizzle/PostgreSQL 17, Hub API em Elysia e motor transacional de estoque.
 A TASK-003 entrega o [adaptador Mercado Livre](packages/marketplace-adapters/README.md),
 com parser puro, cliente de leitura e helper OAuth. A TASK-004 conecta a fila
 durável, reserva, Mock ERP e sincronização de saldo, com consultas operacionais.
-Veja o [guia do pipeline](docs/integrations/task-004.md). Login/sessão do dashboard,
-interface operacional, ARIMA e os demais canais entram nas próximas tarefas.
+Veja o [guia do pipeline](docs/integrations/task-004.md). A TASK-005 implementa
+[conta, sessão HttpOnly, Turnstile e proteção de borda](docs/integrations/task-005.md).
+Sessões comuns acessam somente sua conta/workspace vazio; dados globais continuam
+restritos ao operador até a TASK-013. Interface operacional, conexões por conta,
+ARIMA e os demais canais entram nas próximas tarefas.
 
 Pré-requisitos desta etapa: **Bun 1.4+**, **Docker** e **Docker Compose**.
 TypeScript fica na série **5.9**, Drizzle ORM na **0.45** e Drizzle Kit na **0.31**.
@@ -172,8 +175,8 @@ de delta, motivo, produto, pedido opcional e timestamp. `sku` da movimentação
 bun run dev:api
 # Em outro terminal:
 Invoke-RestMethod http://localhost:3000/health
-Invoke-RestMethod 'http://localhost:3000/api/v1/inventory?limit=50&offset=0'
-Invoke-RestMethod http://localhost:3000/api/v1/inventory/SKU-FONTE-600W/ledger
+# Leituras de estoque/ledger agora exigem credencial privada de operador na CLI.
+# Nunca inserir HUB_ADMIN_TOKEN no navegador. Contrato e configuração: docs/integrations/task-005.md.
 ```
 
 Documentação Scalar em `http://localhost:3000/docs`, contrato OpenAPI em

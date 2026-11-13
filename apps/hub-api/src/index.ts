@@ -2,11 +2,13 @@ import { createDatabase } from '@omnihub/database';
 import { createApp } from './app';
 import { loadEnv } from './config/env';
 import { createRuntime } from './config/runtime';
+import { loadSecurityEnv } from './config/security';
 
 const config = loadEnv();
+const security = loadSecurityEnv();
 const { db, client } = createDatabase(config.databaseUrl, config.databasePoolSize);
 const runtime = await createRuntime(db);
-const app = createApp({ db, corsOrigins: config.corsOrigins, runtime });
+const app = createApp({ db, corsOrigins: config.corsOrigins, runtime, security });
 
 try {
   app.listen({ hostname: config.host, port: config.port, maxRequestBodySize: 1024 * 1024 });
