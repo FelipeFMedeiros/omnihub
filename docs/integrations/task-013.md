@@ -1,8 +1,10 @@
 # TASK-013 — Isolamento por negócio e conexão
 
-Implementação backend em `FelipeFMedeiros/task-013-isolation`, baseada em
-`75e25e9de6bb460a42c1257aae55dba4a76c5dfe`. A tarefa permanece **in-progress**
-até QA independente. Nenhum commit, merge ou push é feito pelo desenvolvedor.
+Implementação backend concluída após QA independente e integrada à `develop`
+no commit `bc79b7b85948302798f08b92b4195de5304d06e1`, sobre a base
+`75e25e9de6bb460a42c1257aae55dba4a76c5dfe`. A rodada final aprovou 245 testes,
+zero falhas/skips e typecheck; migrations foram validadas em bancos dedicados.
+Snapshots e logs permanecem no cofre após a remoção da worktree de implementação.
 
 ## Propriedade e contratos
 
@@ -168,7 +170,7 @@ executada; o teste utiliza uma transação sintética revertida.
 
 ## Reprodução de QA e evidências
 
-Esta worktree possui `.env` privado com `omnihub_task013_dev` e
+O ambiente de validação utilizou `.env` privado com `omnihub_task013_dev` e
 `omnihub_task013_test_db`; sem tokens Mercado Livre. Não copiar ao Git/cofre.
 Não usar bancos TASK-005/principal, não recriar container/volume e não ocupar
 3000/3002/6006. Os testes usam app.handle e sockets loopback em porta efêmera.
@@ -221,8 +223,12 @@ espelhado presente. Para a correção F01, não é necessário repetir reset/upg
 ou migrations já revisados. Saídas antes/depois, códigos de saída, contagens e
 fonte atualizado estão em `output/task-013/test-discovery-fix` e na pasta pública
 `logs/evidences/task-013-2026-11-12/test-discovery-fix` do cofre; as rodadas dev/QA
-anteriores permanecem preservadas. TASK-013 continua in-progress para confirmação
-independente da correção antes da integração.
+anteriores permanecem preservadas. O QA confirmou a correção com `bun test` puro:
+245 pass, zero fail/skip, 1792 assertivas em 19 arquivos reais, sem cópias de output.
+Evidências dessa confirmação estão em `logs/evidences/task-013-2026-11-12/qa-final`.
+Uma linha vazia extra no EOF do helper de upgrade foi removida posteriormente,
+com prova binária sem mudança de lógica em `commit-format-fix`; a rodada QA
+anterior não foi reclassificada como nova execução.
 
 Limites: UI/TASK-006, ARIMA/TASK-007, conexões/OAuth/TASK-014, plataformas novas,
 k6 e homologação pública/oficial não foram implementados ou executados aqui.

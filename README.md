@@ -14,7 +14,7 @@ durável, reserva, Mock ERP e sincronização de saldo, com consultas operaciona
 Veja o [guia do pipeline](docs/integrations/task-004.md). A TASK-005 implementa
 [conta, sessão HttpOnly, Turnstile e proteção de borda](docs/integrations/task-005.md).
 TASK-013 implementa [isolamento por negócio e conexão](docs/integrations/task-013.md)
-no backend, aguardando QA independente. Sessões acessam somente seu workspace;
+no backend, aprovada pelo QA independente com 245 testes. Sessões acessam somente seu workspace;
 o legado permanece fechado, sem dono e sem herança no cadastro. Interface operacional, conexões por conta,
 ARIMA e os demais canais entram nas próximas tarefas.
 
