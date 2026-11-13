@@ -15,8 +15,11 @@ Veja o [guia do pipeline](docs/integrations/task-004.md). A TASK-005 implementa
 [conta, sessão HttpOnly, Turnstile e proteção de borda](docs/integrations/task-005.md).
 TASK-013 implementa [isolamento por negócio e conexão](docs/integrations/task-013.md)
 no backend, aprovada pelo QA independente com 245 testes. Sessões acessam somente seu workspace;
-o legado permanece fechado, sem dono e sem herança no cadastro. Interface operacional, conexões por conta,
-ARIMA e os demais canais entram nas próximas tarefas.
+o legado permanece fechado, sem dono e sem herança no cadastro. TASK-014 acrescenta
+[conexões Mercado Livre por negócio](docs/integrations/task-014.md), OAuth com
+confirmação pela sessão, credenciais criptografadas, simulação local e seleção de
+ERP permitido; aguarda QA/aceite. Interface operacional, ARIMA e os demais canais
+entram nas próximas tarefas.
 
 Pré-requisitos desta etapa: **Bun 1.4+**, **Docker** e **Docker Compose**.
 TypeScript fica na série **5.9**, Drizzle ORM na **0.45** e Drizzle Kit na **0.31**.
@@ -234,7 +237,8 @@ Os handlers executáveis e suas consultas estão em `/docs`.
 ## Mercado Livre — autorização e leitura
 
 Desde TASK-013, o runtime padrão mantém a integração global desabilitada e não
-importa tokens de vendedor. A TASK-014 implementará OAuth/credenciais por conexão;
+importa tokens de vendedor. A TASK-014 acrescenta OAuth/credenciais por conexão,
+com opt-in e custódia descritos no [guia próprio](docs/integrations/task-014.md);
 os comandos abaixo descrevem o fluxo administrativo histórico das TASK-003/004.
 Preencha os placeholders `MELI_*` somente no `.env` local. O OAuth da aplicação
 Omnihub é separado do login do MCP. O Mercado Livre usa usuários de teste no

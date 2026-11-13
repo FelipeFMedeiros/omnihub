@@ -38,9 +38,9 @@ export function pipelineRoutes(db: Database, runtime: PipelineRuntime, scope: (r
     const rows = await db.select().from(connectionTable).where(eq(connectionTable.workspaceId, context.workspaceId));
     const destinations = await db.select().from(erpDestinations).where(eq(erpDestinations.workspaceId, context.workspaceId));
     const data = rows.map(row => ({ id: row.id, name: row.platform, transportMode: row.transportMode, state: row.state,
-      ...(checks.get(`${context.workspaceId}:${row.id}`) ?? { status: row.state === 'DISABLED' ? 'DISABLED' : row.platform !== 'MERCADO_LIVRE' ? 'NOT_IMPLEMENTED' : 'NOT_CONFIGURED', checkedAt: null, latencyMs: null }) }));
+      ...(row.platform !== 'MERCADO_LIVRE' ? { status: 'NOT_IMPLEMENTED', checkedAt: null, latencyMs: null } : row.state === 'DISABLED' ? { status: 'DISABLED', checkedAt: null, latencyMs: null } : runtime.connectionRuntime ? { status: row.credentialState !== 'CONNECTED' ? row.credentialState : row.checkStatus ?? 'NOT_MEASURED', checkedAt: row.checkedAt?.toISOString() ?? null, latencyMs: row.checkLatencyMs } : checks.get(`${context.workspaceId}:${row.id}`) ?? { status: 'NOT_CONFIGURED', checkedAt: null, latencyMs: null }) }));
     return { data: [...data, ...destinations.map(row => ({ id: row.id, name: 'MOCK_ERP', state: row.state, transportMode: 'LOCAL_FIXTURE',
-      ...(checks.get(`${context.workspaceId}:${row.id}`) ?? { status: row.state === 'DISABLED' ? 'DISABLED' : 'NOT_CONFIGURED', checkedAt: null, latencyMs: null }) }))] };
+      ...(row.state === 'DISABLED' ? { status: 'DISABLED', checkedAt: null, latencyMs: null } : checks.get(`${context.workspaceId}:${row.id}`) ?? { status: 'NOT_CONFIGURED', checkedAt: null, latencyMs: null }) }))] };
   };
   const connectionResponse = t.Object({ data: t.Array(t.Object({ id: t.String(), name: t.String(), transportMode: t.String(), state: t.String(), status: t.String(), checkedAt: nullableString, latencyMs: t.Nullable(t.Number()) })) });
   const restock = async (request: Request, destinationId?: string) => {
@@ -55,7 +55,8 @@ export function pipelineRoutes(db: Database, runtime: PipelineRuntime, scope: (r
     const [product] = await db.select().from(products).where(and(eq(products.workspaceId, target.workspaceId), eq(products.sku, value.sku)));
     if (!product) throw new HubError(404, 'CANONICAL_PRODUCT_NOT_FOUND', 'Produto não encontrado.');
     await new InventoryService(db, target).restock(product.id, value.quantity, value.movementId);
-    await Promise.all((runtime.pipelines ?? []).filter(p => p.context.workspaceId === target.workspaceId && p.context.erpDestinationId === target.erpDestinationId).map(p => p.syncStock([product.sku])));
+    const active = runtime.connectionRuntime ? await db.select({ id: connectionTable.id }).from(connectionTable).where(and(eq(connectionTable.workspaceId, target.workspaceId), eq(connectionTable.state, 'ACTIVE'), eq(connectionTable.credentialState, 'CONNECTED'))) : undefined;
+    await Promise.all((runtime.pipelines ?? []).filter(p => p.context.workspaceId === target.workspaceId && p.context.erpDestinationId === target.erpDestinationId && (!active || active.some(c => c.id === p.context.connectionId))).map(p => p.syncStock([product.sku])));
     return { accepted: true, movementId: value.movementId };
   };
   return new Elysia().model({MeliNotification:MeliNotificationSchema,ErpStockMovement:stockMovementBody})
@@ -64,15 +65,23 @@ export function pipelineRoutes(db: Database, runtime: PipelineRuntime, scope: (r
     })
     .get('/api/oauth/meli/callback', async ({ request, set }) => {
       set.headers['Cache-Control'] = 'no-store'; set.headers['Referrer-Policy'] = 'no-referrer';
+      if (runtime.connectionRuntime) {
+        await runtime.connectionRuntime.service.callback(request.url);
+        // Static server-configured return destination; no code/state/token in the UI URL.
+        return new Response(null, { status: 303, headers: { Location: runtime.connectionRuntime.service.store!.settings.returnUrl, 'Cache-Control': 'no-store', 'Referrer-Policy': 'no-referrer' } });
+      }
       if (!runtime.oauth) throw new HubError(503, 'MELI_NOT_CONFIGURED', 'Configure OAuth Mercado Livre.');
-      return runtime.oauth.callback(request.url);
-    }, { response: { 200: t.Object({ authorized: t.Boolean() }) }, detail: { tags: ['OAuth'] } })
+      return Response.json(await runtime.oauth.callback(request.url));
+    }, { response: { 200: t.Object({ authorized: t.Boolean() }), 303: t.Null() }, detail: { tags: ['OAuth'], description: 'Callback público sem cookie: grava autorização pendente privada e volta para URL fixa sem código/state. A sessão iniciadora confirma em /api/v1/connections/:id/oauth/confirm.' } })
     .post('/api/oauth/meli/smoke', ({request,body})=>{
       admin(request);if(!runtime.smoke)throw new HubError(503,'MELI_NOT_CONFIGURED','Configure vendedor de teste.');return runtime.smoke(body?.externalOrderId);
     },{body:t.Optional(t.Object({externalOrderId:t.Optional(t.String({pattern:'^[1-9][0-9]{0,99}$'}))})),response:{200:t.Object({ok:t.Boolean(),marketplace:t.String(),mode:t.String(),checkedAt:t.String(),identityMatches:t.Boolean(),testUserVerified:t.Boolean(),operations:t.Array(t.String()),orderRead:t.Boolean(),canonicalParsingVerified:t.Boolean()})},detail:{tags:['OAuth'],security:[{sessionCookie:[],csrfHeader:[],turnstileHeader:[]},{bearerAuth:[],workspaceTarget:[]}]}})
     .post('/api/webhooks/meli', async ({ request }) => {
       const raw = parseJson(await rawBody(request));
+      const activeBindings = runtime.connectionRuntime ? await db.select({ connectionId: connectionTable.id, erpDestinationId: erpDestinations.id }).from(connectionTable).innerJoin(erpDestinations, and(eq(erpDestinations.workspaceId, connectionTable.workspaceId), eq(erpDestinations.state, 'ACTIVE'))).where(and(eq(connectionTable.state, 'ACTIVE'), eq(connectionTable.credentialState, 'CONNECTED'))) : undefined;
       const matches = (runtime.pipelines ?? []).filter(pipeline => {
+        if (runtime.connectionRuntime && pipeline.transportMode !== 'OFFICIAL_TEST_USER') return false;
+        if (activeBindings && !activeBindings.some(b => b.connectionId === pipeline.context.connectionId && b.erpDestinationId === pipeline.context.erpDestinationId)) return false;
         if (pipeline.gateway.source !== 'MERCADO_LIVRE') return false;
         try { pipeline.gateway.identifyNotification(raw); return true; } catch { return false; }
       });
@@ -121,7 +130,7 @@ export function pipelineRoutes(db: Database, runtime: PipelineRuntime, scope: (r
           const response = await (target.transport ?? fetch)(new Request(`${target.url}/health`, { redirect: 'error', signal: AbortSignal.timeout(3000) }));
           await response.body?.cancel(); if (!response.ok) throw new Error('Unavailable');
         })),
-        ...(runtime.pipelines ?? []).filter(p => p.context.workspaceId === context.workspaceId).map(p => probe(p.context.connectionId, async () => {
+        ...(runtime.pipelines ?? []).filter(p => p.context.workspaceId === context.workspaceId).map(p => runtime.connectionRuntime ? runtime.connectionRuntime.service.check(context, p.context.connectionId, () => p.gateway.checkConnection()) : probe(p.context.connectionId, async () => {
           await requireConnection(db, p.context, p.context.source);
           if (!(await p.gateway.checkConnection()).testUser) throw new Error('Unavailable');
         })),

@@ -30,7 +30,11 @@ export class CompilerPipeline {
     const reference = this.gateway.identifyNotification(raw);
     if (reference.source !== this.context.source) throw new HubError(422, 'CONNECTION_SOURCE_MISMATCH', 'Origem incompatível.');
     const fingerprint = createHash('sha256').update(`${this.transportMode}:${JSON.stringify(raw)}`).digest('hex');
-    const [job] = await this.db.insert(pipelineJobs).values({ ...this.context, ...reference, fingerprint }).onConflictDoUpdate({ target: [pipelineJobs.workspaceId, pipelineJobs.connectionId, pipelineJobs.transportMode, pipelineJobs.fingerprint], set: { receiptCount: sql`${pipelineJobs.receiptCount} + 1` } }).returning();
+    const job = await inTransaction(this.db, async tx => {
+      await requireWorker(tx, this.context);
+      const [row] = await tx.insert(pipelineJobs).values({ ...this.context, ...reference, fingerprint }).onConflictDoUpdate({ target: [pipelineJobs.workspaceId, pipelineJobs.connectionId, pipelineJobs.transportMode, pipelineJobs.fingerprint], set: { receiptCount: sql`${pipelineJobs.receiptCount} + 1` } }).returning();
+      return row;
+    });
     return { accepted: true, processingId: job!.id };
   }
   start() { if (!this.timer) this.timer = setInterval(() => { void this.runOnce().catch(() => console.error(JSON.stringify({ event: 'pipeline_worker_failed' }))); }, 500); }
@@ -41,6 +45,7 @@ export class CompilerPipeline {
     try {
       await this.validate();
       const job = await inTransaction(this.db, async tx => {
+        await requireWorker(tx, this.context);
         const [candidate] = await tx.select().from(pipelineJobs).where(and(this.scope(), eq(pipelineJobs.source,this.gateway.source),eq(pipelineJobs.transportMode,this.transportMode),or(eq(pipelineJobs.state, 'QUEUED'), and(eq(pipelineJobs.state, 'PROCESSING'), lt(pipelineJobs.leaseUntil, new Date()))))).orderBy(asc(pipelineJobs.createdAt), asc(pipelineJobs.id)).limit(1).for('update', { skipLocked: true });
         if (!candidate) return undefined;
         const [claimed] = await tx.update(pipelineJobs).set({ state: 'PROCESSING', leaseUntil: new Date(Date.now() + 120000), leaseToken: Bun.randomUUIDv7() }).where(eq(pipelineJobs.id, candidate.id)).returning();
@@ -104,6 +109,7 @@ export class CompilerPipeline {
     let failed = false;
     for (const { mapping, product } of mappings) {
       try {
+        await this.validate();
         await this.gateway.updateStock({ ...mapping, sku: product.sku }, Math.max(0, product.currentStock - product.reservedStock - product.safetyStock));
         await this.db.update(spokeMappings).set({ lastSyncedAt: new Date(), lastSyncError: null, lastSyncQuantity: Math.max(0, product.currentStock - product.reservedStock - product.safetyStock) }).where(eq(spokeMappings.id, mapping.id));
       } catch (error) { failed = true; await this.db.update(spokeMappings).set({ lastSyncError: safeCode(error) }).where(eq(spokeMappings.id, mapping.id)); }

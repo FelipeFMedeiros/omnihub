@@ -1,4 +1,4 @@
-import { requireWorkspace, type WorkspaceContext } from './context';
+import { requireConnection, requireDestination, requireWorkspace, type WorkspaceContext } from './context';
 import { canonicalOrders, erpAttempts, erpDispatches, pipelineJobs, products, spokeMappings, type Database } from '@omnihub/database';
 import { inspectCanonicalSnapshot, inspectErpSnapshot, inspectRawSnapshot } from '@omnihub/marketplace-adapters';
 import { createHash } from 'node:crypto';
@@ -39,14 +39,18 @@ export class OperationsService {
     return { data: rows.map(({ mapping, sku }) => ({ ...mapping, sku, lastSyncedAt: mapping.lastSyncedAt?.toISOString() ?? null, implementation: mapping.marketplace === 'MERCADO_LIVRE' ? 'IMPLEMENTED' : 'NOT_IMPLEMENTED' })), limit, offset };
   }
   async retry(id: string) {
-    await requireWorkspace(this.db, this.context);
-    const [job] = await this.db.select().from(pipelineJobs).where(and(eq(pipelineJobs.workspaceId, this.context.workspaceId), eq(pipelineJobs.id,id)));
-    if (!job) throw new HubError(404,'PROCESSING_NOT_FOUND','Processamento não encontrado.');
-    if (job.state !== 'FAILED') throw new HubError(409,'PROCESSING_NOT_RETRYABLE','Somente processamento falho pode ser reenfileirado.');
-    const [dispatch] = job.orderId ? await this.db.select().from(erpDispatches).where(and(eq(erpDispatches.workspaceId, this.context.workspaceId), eq(erpDispatches.orderId,job.orderId))) : [];
-    if (dispatch && !dispatch.protocol && ['EXHAUSTED','FAILED'].includes(dispatch.state)) throw new HubError(409,'ERP_RECONCILIATION_REQUIRED','Concilie o ERP; o orçamento não pode ser reiniciado.');
-    const [created] = await this.db.insert(pipelineJobs).values({ workspaceId: this.context.workspaceId, connectionId: job.connectionId, erpDestinationId: job.erpDestinationId, source:job.source,externalOrderId:job.externalOrderId,transportMode:job.transportMode,fingerprint:createHash('sha256').update(`${job.fingerprint}:${Bun.randomUUIDv7()}`).digest('hex') }).returning();
-    return { processingId:created!.id,retryOf:id };
+    return this.db.transaction(async tx => {
+      await requireWorkspace(tx, this.context);
+      const [job] = await tx.select().from(pipelineJobs).where(and(eq(pipelineJobs.workspaceId, this.context.workspaceId), eq(pipelineJobs.id,id)));
+      if (!job) throw new HubError(404,'PROCESSING_NOT_FOUND','Processamento não encontrado.');
+      if (job.state !== 'FAILED') throw new HubError(409,'PROCESSING_NOT_RETRYABLE','Somente processamento falho pode ser reenfileirado.');
+      await requireConnection(tx, { ...this.context, connectionId: job.connectionId }, job.source);
+      await requireDestination(tx, this.context, job.erpDestinationId);
+      const [dispatch] = job.orderId ? await tx.select().from(erpDispatches).where(and(eq(erpDispatches.workspaceId, this.context.workspaceId), eq(erpDispatches.orderId,job.orderId))) : [];
+      if (dispatch && !dispatch.protocol && ['EXHAUSTED','FAILED'].includes(dispatch.state)) throw new HubError(409,'ERP_RECONCILIATION_REQUIRED','Concilie o ERP; o orçamento não pode ser reiniciado.');
+      const [created] = await tx.insert(pipelineJobs).values({ workspaceId: this.context.workspaceId, connectionId: job.connectionId, erpDestinationId: job.erpDestinationId, source:job.source,externalOrderId:job.externalOrderId,transportMode:job.transportMode,fingerprint:createHash('sha256').update(`${job.fingerprint}:${Bun.randomUUIDv7()}`).digest('hex') }).returning();
+      return { processingId:created!.id,retryOf:id };
+    });
   }
   async metrics(from: Date, to: Date) {
     await requireWorkspace(this.db, this.context);

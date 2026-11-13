@@ -28,6 +28,8 @@ export interface MeliClientOptions {
   readonly initialTokens?: MeliTokens;
   /** Deve persistir a rotação antes que o token novo seja usado. */
   readonly onTokens?: (tokens: MeliTokens) => Promise<void>;
+  /** Persist a rotation fence BEFORE consuming a single-use refresh token. */
+  readonly beforeRefresh?: () => Promise<void>;
   readonly transport?: (request: Request) => Promise<Response>;
   readonly sleep?: (ms: number) => Promise<void>;
   readonly now?: () => number;
@@ -60,6 +62,7 @@ export class MeliClient {
   #options: MeliClientOptions;
   #tokens?: MeliTokens;
   #refreshing?: Promise<MeliTokens>;
+  #reauthRequired = false;
   #now: () => number;
   #transport: (request: Request) => Promise<Response>;
   #sleep: (ms: number) => Promise<void>;
@@ -150,12 +153,15 @@ export class MeliClient {
   }
 
   async #refresh(): Promise<MeliTokens> {
+    if (this.#reauthRequired) throw new AdapterError('REAUTH_REQUIRED', 'Refaça a autorização da conexão.', 409);
     if (this.#refreshing) return this.#refreshing;
     const refreshToken = this.#tokens?.refreshToken ?? this.#options.refreshToken;
     if (!refreshToken?.trim() || /SUBSTITUIR/i.test(refreshToken)) throw new AdapterError('MELI_INVALID_CONFIGURATION', 'Autorize a aplicação antes de executar a consulta externa.', 400);
     const form = this.#credentialForm('refresh_token'); form.set('refresh_token', refreshToken);
-    const pending = this.#grant(form); this.#refreshing = pending;
-    try { return await pending; } finally { this.#refreshing = undefined; }
+    const pending = (async () => { await this.#options.beforeRefresh?.(); return this.#grant(form); })(); this.#refreshing = pending;
+    try { return await pending; }
+    catch (error) { this.#reauthRequired = true; this.#tokens = undefined; throw error; }
+    finally { this.#refreshing = undefined; }
   }
 
   async #get(path: string): Promise<unknown> {

@@ -4,7 +4,7 @@ import { createDatabase } from '@omnihub/database';
 import { createApp } from '../src/app';
 import { loadSecurityEnv } from '../src/config/security';
 
-const target = resolve(process.argv[2] ?? 'docs/integrations/task-013.openapi.json');
+const target = resolve(process.argv[2] ?? 'docs/integrations/task-014.openapi.json');
 const { db, client } = createDatabase();
 try {
   // Documentation has no dependency on credentials or a live marketplace/runtime.

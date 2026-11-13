@@ -42,6 +42,9 @@ export const connections = pgTable('connections', {
   externalAccountId: varchar('external_account_id', { length: 150 }),
   state: varchar('state', { length: 20 }).$type<'ACTIVE' | 'DISABLED'>().notNull().default('DISABLED'),
   name: varchar('name', { length: 120 }).notNull(), createdAt: utc('created_at').defaultNow().notNull(),
+  credentialState: varchar('credential_state', { length: 25 }).$type<'NOT_CONNECTED' | 'CONNECTED' | 'REAUTH_REQUIRED' | 'ERROR'>().notNull().default('NOT_CONNECTED'),
+  generation: integer('generation').notNull().default(0),
+  checkedAt: utc('checked_at'), checkStatus: varchar('check_status', { length: 30 }), checkLatencyMs: integer('check_latency_ms'),
 }, table => [
   uniqueIndex('connections_scope_id').on(table.workspaceId, table.id),
   uniqueIndex('connections_scope_channel').on(table.workspaceId, table.id, table.platform),
@@ -51,6 +54,7 @@ export const connections = pgTable('connections', {
   check('connections_transport', sql`${table.transportMode} IN ('LOCAL_FIXTURE','OFFICIAL_TEST_USER')`),
   check('connections_state', sql`${table.state} IN ('ACTIVE','DISABLED') AND (${table.state} <> 'ACTIVE' OR ${table.externalAccountId} IS NOT NULL)`),
   check('connections_identity_nonempty', sql`${table.externalAccountId} IS NULL OR length(btrim(${table.externalAccountId})) > 0`),
+  check('connections_credentials_state', sql`${table.credentialState} IN ('NOT_CONNECTED','CONNECTED','REAUTH_REQUIRED','ERROR') AND ${table.generation} >= 0`),
 ]);
 
 /** Chave de configuração permitida pelo operador; URLs/segredos não vêm do navegador. */
@@ -77,6 +81,37 @@ export const authSessions = pgTable('auth_sessions', {
   index('auth_sessions_expiry_idx').on(table.expiresAt),
   check('auth_sessions_expiry_valid', sql`${table.expiresAt} > ${table.issuedAt}`),
 ]);
+
+/** Authenticated ciphertext only; key material lives outside PostgreSQL. */
+export const connectionCredentials = pgTable('connection_credentials', {
+  connectionId: uuid('connection_id').primaryKey(), workspaceId: workspaceId(),
+  appId: varchar('app_id', { length: 100 }).notNull(), envelope: text('envelope').notNull(),
+  revision: integer('revision').notNull().default(1),
+  phase: varchar('phase', { length: 20 }).$type<'READY' | 'ROTATING'>().notNull().default('READY'),
+  leaseToken: uuid('lease_token'), leaseUntil: utc('lease_until'), updatedAt: utc('updated_at').defaultNow().notNull(),
+}, table => [
+  foreignKey({ columns: [table.workspaceId, table.connectionId], foreignColumns: [connections.workspaceId, connections.id], name: 'credentials_connection_scope' }).onDelete('cascade'),
+  check('credentials_revision_phase', sql`${table.revision} > 0 AND ${table.phase} IN ('READY','ROTATING')`),
+]);
+
+export const connectionAuthorizations = pgTable('connection_authorizations', {
+  id: primaryId(), workspaceId: workspaceId(), connectionId: uuid('connection_id').notNull(),
+  userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  sessionId: uuid('session_id').notNull().references(() => authSessions.id, { onDelete: 'cascade' }),
+  generation: integer('generation').notNull(), stateHash: varchar('state_hash', { length: 64 }).notNull().unique(),
+  envelope: text('envelope'), status: varchar('status', { length: 20 }).$type<'STARTED' | 'EXCHANGING' | 'PENDING' | 'CONFIRMED' | 'FAILED'>().notNull().default('STARTED'),
+  expiresAt: utc('expires_at').notNull(), createdAt: utc('created_at').defaultNow().notNull(),
+}, table => [
+  foreignKey({ columns: [table.workspaceId, table.connectionId], foreignColumns: [connections.workspaceId, connections.id], name: 'authorization_connection_scope' }).onDelete('cascade'),
+  index('authorization_session_connection').on(table.sessionId, table.connectionId),
+  check('authorization_status', sql`${table.status} IN ('STARTED','EXCHANGING','PENDING','CONFIRMED','FAILED')`),
+]);
+
+export const connectionImports = pgTable('connection_imports', {
+  connectionId: uuid('connection_id').primaryKey(), workspaceId: workspaceId(),
+  sourceDigest: varchar('source_digest', { length: 64 }).notNull().unique(),
+  verificationReference: varchar('verification_reference', { length: 200 }).notNull(), importedAt: utc('imported_at').defaultNow().notNull(),
+}, table => [foreignKey({ columns: [table.workspaceId, table.connectionId], foreignColumns: [connections.workspaceId, connections.id], name: 'import_connection_scope' }).onDelete('cascade')]);
 
 export const products = pgTable('products', {
   id: primaryId(),

@@ -16,6 +16,8 @@ import { validateTargetBindings } from './config/runtime';
 import { clientIp, EdgeRateLimiter } from './plugins/rate-limit';
 import { createTurnstileVerifier, type SiteverifyFetch } from './plugins/turnstile';
 import { authRoutes } from './routes/auth.routes';
+import { connectionRoutes } from './routes/connections.routes';
+import type { AuthenticatedSession } from './plugins/auth';
 
 interface AppOptions {
   readonly db: Database;
@@ -30,13 +32,15 @@ export function createApp({ db, corsOrigins = ['http://localhost:5173'], runtime
   const auth = security ? new AuthService(db, security) : undefined;
   const verifier = security ? createTurnstileVerifier(security, siteverifyFetch) : undefined;
   const contexts = new WeakMap<Request, WorkspaceContext>();
+  const sessions = new WeakMap<Request, AuthenticatedSession>();
+  const session = (request: Request) => { const value = sessions.get(request); if (!value) throw new HubError(401, 'SESSION_REQUIRED', 'Use a sessão iniciadora.'); return value; };
   const context = (request: Request) => {
     const value = contexts.get(request);
     if (!value) throw new HubError(401, 'UNAUTHENTICATED', 'Sessão exigida.');
     return value;
   };
   validateTargetBindings(runtime?.erpTargets ?? []);
-  for (const pipeline of runtime?.pipelines ?? []) pipeline.publishStock = async skus => {
+  if (!runtime?.connectionRuntime) for (const pipeline of runtime?.pipelines ?? []) pipeline.publishStock = async skus => {
     await Promise.all((runtime?.pipelines ?? []).filter(p => p.context.workspaceId === pipeline.context.workspaceId && p.transportMode === pipeline.transportMode).map(p => p.syncStock(skus)));
   };
   return new Elysia()
@@ -72,6 +76,7 @@ export function createApp({ db, corsOrigins = ['http://localhost:5173'], runtime
       if (/^\/api\/v1(?:\/|$)/.test(path)) {
         let scope: WorkspaceContext;
         if (request.headers.has('authorization')) {
+          if (/^\/api\/v1\/(connections|erp-destinations)(?:\/|$)/.test(path)) throw new HubError(401, 'SESSION_REQUIRED', 'Use uma sessão autenticada.');
           requireOperator(request, runtime?.adminToken ?? '');
           const workspaceId = request.headers.get('x-workspace-id') ?? '';
           if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(workspaceId)) throw new HubError(422, 'OPERATOR_WORKSPACE_REQUIRED', 'Informe alvo explícito de manutenção.');
@@ -83,6 +88,7 @@ export function createApp({ db, corsOrigins = ['http://localhost:5173'], runtime
             token: request.headers.get('x-turnstile-token') ?? undefined, ip: clientIp(request, server?.requestIP(request)?.address, security), action: 'domain_mutation',
           });
           scope = { workspaceId: session.account.workspace.id };
+          sessions.set(request, session);
         }
         await requireWorkspace(db, scope);
         contexts.set(request, Object.freeze(scope));
@@ -90,7 +96,7 @@ export function createApp({ db, corsOrigins = ['http://localhost:5173'], runtime
       if (path.startsWith('/api/oauth/') && path !== '/api/oauth/meli/callback') requireOperator(request, runtime?.adminToken ?? '');
     })
     .use(openapi({ path: '/docs', documentation: {
-      info: { title: 'Omnihub API', version: '0.2.0', description: 'Domínio isolado pelo workspace da sessão; conexão identifica a loja. Mutações exigem Origin, CSRF e X-Turnstile-Token (action domain_mutation, cdata csrfToken). CLI exige alvo explícito X-Workspace-Id.' },
+      info: { title: 'Omnihub API', version: '0.3.0', description: 'Domínio isolado pelo workspace da sessão; conexão identifica a loja. OAuth por conexão exige confirmação na sessão iniciadora. Mutações exigem Origin, CSRF e X-Turnstile-Token (action domain_mutation, cdata csrfToken). CLI de manutenção exige alvo explícito X-Workspace-Id.' },
       components: { securitySchemes: {
         bearerAuth: { type: 'http', scheme: 'bearer', description: 'Somente CLI do operador local. Navegadores são recusados; nunca inserir este segredo na UI.' },
         sessionCookie: { type: 'apiKey', in: 'cookie', name: 'omnihub_session', description: 'Sessão HttpOnly; workspace resolvido pelo vínculo no servidor.' },
@@ -114,5 +120,6 @@ export function createApp({ db, corsOrigins = ['http://localhost:5173'], runtime
     })
     .use(inventoryRoutes(request => new InventoryService(db, context(request))))
     .use(auth && verifier ? authRoutes(auth, verifier) : new Elysia())
+    .use(connectionRoutes(db, runtime ?? { adminToken: '', webhookSecret: '', erpUrl: '', mockAdminToken: '' }, context, session))
     .use(pipelineRoutes(db, runtime ?? { adminToken: '', webhookSecret: '', erpUrl: '', mockAdminToken: '' }, context));
 }

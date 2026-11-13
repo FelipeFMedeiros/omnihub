@@ -14,15 +14,16 @@ export interface WorkerContext extends WorkspaceContext {
 }
 export async function requireWorkspace(db: Database | Transaction, context: WorkspaceContext) {
   const [workspace] = await db.select({ id: workspaces.id }).from(workspaces)
-    .where(and(eq(workspaces.id, context.workspaceId), eq(workspaces.kind, 'ACCOUNT')));
+    .where(and(eq(workspaces.id, context.workspaceId), eq(workspaces.kind, 'ACCOUNT'))).for('share');
   if (!workspace) throw new HubError(403, 'WORKSPACE_CLOSED', 'Negócio indisponível para operação.');
 }
 export async function requireConnection(db: Database | Transaction, context: OrderContext, source: string) {
   await requireWorkspace(db, context);
   if (source === 'MANUAL' && context.connectionId === null) return;
   if (source === 'MANUAL' || !context.connectionId) throw new HubError(422, 'CONNECTION_SOURCE_MISMATCH', 'Origem incompatível com a conexão.');
-  const [connection] = await db.select().from(connections).where(and(eq(connections.workspaceId, context.workspaceId), eq(connections.id, context.connectionId), eq(connections.state, 'ACTIVE')));
+  const [connection] = await db.select().from(connections).where(and(eq(connections.workspaceId, context.workspaceId), eq(connections.id, context.connectionId), eq(connections.state, 'ACTIVE'))).for('share');
   if (!connection || connection.platform !== source) throw new HubError(404, 'CONNECTION_NOT_FOUND', 'Conexão indisponível neste negócio.');
+  if (['REAUTH_REQUIRED', 'ERROR'].includes(connection.credentialState)) throw new HubError(409, 'REAUTH_REQUIRED', 'Refaça a autorização desta conexão.');
   return connection;
 }
 export async function requireWorker(db: Database | Transaction, context: WorkerContext) {
@@ -33,7 +34,7 @@ export async function requireWorker(db: Database | Transaction, context: WorkerC
 }
 export async function requireDestination(db: Database | Transaction, context: WorkspaceContext, id: string) {
   await requireWorkspace(db, context);
-  const [destination] = await db.select().from(erpDestinations).where(and(eq(erpDestinations.workspaceId, context.workspaceId), eq(erpDestinations.id, id), eq(erpDestinations.state, 'ACTIVE')));
+  const [destination] = await db.select().from(erpDestinations).where(and(eq(erpDestinations.workspaceId, context.workspaceId), eq(erpDestinations.id, id), eq(erpDestinations.state, 'ACTIVE'))).for('share');
   if (!destination) throw new HubError(404, 'ERP_DESTINATION_NOT_FOUND', 'Destino ERP indisponível neste negócio.');
   return destination;
 }

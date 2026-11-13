@@ -57,6 +57,13 @@
       "when": 1794530473184,
       "tag": "0007_typical_mentallo",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1794554103239,
+      "tag": "0008_talented_blob",
+      "breakpoints": true
     }
   ]
 }

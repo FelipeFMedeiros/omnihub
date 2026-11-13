@@ -12,7 +12,8 @@ const app = createApp({ db, corsOrigins: config.corsOrigins, runtime, security }
 
 try {
   app.listen({ hostname: config.host, port: config.port, maxRequestBodySize: 1024 * 1024 });
-  for (const pipeline of runtime.pipelines ?? []) pipeline.start();
+  if (runtime.connectionRuntime) runtime.connectionRuntime.start();
+  else for (const pipeline of runtime.pipelines ?? []) pipeline.start();
 } catch (error) {
   await client.end();
   throw error;
@@ -23,6 +24,7 @@ let stopping = false;
 async function shutdown() {
   if (stopping) return;
   stopping = true;
+  await runtime.connectionRuntime?.stop();
   await Promise.all((runtime.pipelines ?? []).map(pipeline => pipeline.stop()));
   await app.stop();
   await client.end();

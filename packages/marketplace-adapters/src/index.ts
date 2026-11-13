@@ -10,3 +10,4 @@ export * from './erp/emitter';
 export * from './signing';
 export * from './mercadolivre/local';
 export * from './inspection';
+export * from './mercadolivre/simulation';

@@ -21,6 +21,7 @@
     "setup:local": "bun apps/hub-api/scripts/setup-local.ts",
     "auth:turnstile-smoke": "bun --env-file=.env apps/hub-api/scripts/turnstile-smoke.ts",
     "legacy:claim": "bun --env-file=.env apps/hub-api/scripts/claim-legacy.ts",
+    "connections:import": "bun --env-file=.env apps/hub-api/scripts/connection-import.ts",
     "api:openapi": "bun --env-file=.env apps/hub-api/scripts/export-openapi.ts",
     "task013:verify": "bun --env-file=.env apps/hub-api/scripts/verify-task013.ts",
     "meli:smoke": "bun --env-file=.env packages/marketplace-adapters/scripts/meli.ts smoke",
