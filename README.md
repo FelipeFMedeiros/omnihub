@@ -18,7 +18,9 @@ no backend, aprovada pelo QA independente com 245 testes. Sessões acessam somen
 o legado permanece fechado, sem dono e sem herança no cadastro. TASK-014 acrescenta
 [conexões Mercado Livre por negócio](docs/integrations/task-014.md), OAuth com
 confirmação pela sessão, credenciais criptografadas, simulação local e seleção de
-ERP permitido; aguarda QA/aceite. Interface operacional, ARIMA e os demais canais
+ERP permitido. A TASK-014 foi aprovada pelo QA independente com 279 testes,
+zero falhas/skips, tipagem e migrações verificadas em bancos isolados.
+Interface operacional, ARIMA e os demais canais
 entram nas próximas tarefas.
 
 Pré-requisitos desta etapa: **Bun 1.4+**, **Docker** e **Docker Compose**.

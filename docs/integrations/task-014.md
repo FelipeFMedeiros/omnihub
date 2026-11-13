@@ -1,7 +1,14 @@
 # TASK-014 — Conexões de lojas e ERP por negócio
 
 Backend sobre a TASK-013 (`19aea1f78992ed972f4c87a67542a327943743b3`).
-A tarefa permanece **in-progress**, aguardando QA e aceite do coordenador.
+A tarefa foi **concluída e aprovada pelo QA independente** em 2026-11-13.
+Implementação integrada na `develop`: `0e7c9a24ff9d984034671838d7e83de64cd5e8e1`.
+QA: 279 testes aprovados, zero falhas/skips, 2113 assertivas em 21 arquivos;
+tipagem, OpenAPI, geração Drizzle, upgrade 0007→0008, criação do zero,
+reaplicação e seed duplo aprovados em bancos exclusivos da tarefa.
+Essas verificações não migraram o banco principal nem iniciaram serviços.
+O cofre preserva fonte, hashes, saídas e limites em
+`logs/evidences/task-014-2026-11-13/`, com parecer e publicação em logs datados.
 Contrato gerado dos handlers: [OpenAPI](task-014.openapi.json).
 A interface pertence à TASK-006; não há tela nova nesta entrega.
 
